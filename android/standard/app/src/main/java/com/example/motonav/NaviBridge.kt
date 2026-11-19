@@ -132,6 +132,7 @@ object NaviBridge {
     private var camMinDist = Int.MAX_VALUE
     private var myLat = Double.NaN
     private var myLng = Double.NaN
+    fun currentPosition() = doubleArrayOf(myLat, myLng)
     private var newLaneApi = false
     private var lastLaneMsg = ""
     private var lastRoadText = ""
@@ -173,10 +174,13 @@ object NaviBridge {
         ServiceSettings.updatePrivacyAgree(c, true)
     }
 
+    var appContext: Context? = null
+
     /** v3.0 准备一次新的导航：拿到高德导航对象，挂上我们的“旁听”回调，清空上次的状态 */
     fun attach(context: Context): AMapNavi? {
         WebMotorGuide.stop()
         val c = context.applicationContext
+        appContext = c
         endCruiseQuietly()                                                       // v4.7 开始导航前先结束巡航
         resetState()
         val epoch = arrivalSession.prepare()
@@ -209,6 +213,7 @@ object NaviBridge {
         arrivalSession.cancel(epoch)
         try { navi?.stopNavi() } catch (_: Exception) {}
         ShareGuide.stop()                                                        // v4.5
+        AlongWeatherMonitor.clearWeather()
         handler.post { if (arrivalSession.isCurrent(epoch)) resetState() }
         finish("C", "已退出导航", epoch)
     }
@@ -952,6 +957,7 @@ object NaviBridge {
                             if (usingComponent && arrivalSession.begin(epoch,type!=1)) RideRecorder.start("导航","导航组件",type!=1)
                             lastTrafficAt = 0L
                             pushTraffic()
+                            navi?.naviPath?.let { p -> appContext?.let { ctx -> AlongWeatherMonitor.checkRouteWeather(ctx, p.coordList, p.allLength) } }
                         }
                     }
                     "onNaviInfoUpdate" -> (args?.getOrNull(0) as? NaviInfo)?.let { onNaviInfo(it,epoch) }
@@ -979,6 +985,7 @@ object NaviBridge {
                                 ShareGuide.onCalcDone(true)
                                 lastTrafficAt = 0L
                                 pushTraffic()
+                                navi?.naviPath?.let { p -> appContext?.let { ctx -> AlongWeatherMonitor.checkRouteWeather(ctx, p.coordList, p.allLength) } }
                             }
                         }
                     }

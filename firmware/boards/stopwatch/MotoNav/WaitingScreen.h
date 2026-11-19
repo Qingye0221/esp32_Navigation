@@ -161,8 +161,17 @@ static void drawDestinationsSheet() {
     drawTextUTF8(itemX + 54, curY + 25, name, C_WHITE);
     drawTextUTF8(itemX + 54, curY + 45, addr, 0x7BEF);
 
-    // 右侧导航箭头 (>)
-    drawAaString(itemX + itemW - 18, curY + itemH / 2, ">", 1.8f, 1.0f, 10.0f, 0x4A69, true);
+    // 右侧通勤路况胶囊或导航箭头 (>)
+    if (destItems[i].commuteMin > 0) {
+      char tcBuf[16];
+      snprintf(tcBuf, sizeof(tcBuf), "%dm", destItems[i].commuteMin);
+      uint16_t tcCol = (destItems[i].trafficStatus >= 2) ? 0xF9A4 : (destItems[i].trafficStatus == 1) ? 0xFDE0 : 0x05E0;
+      drawTranslucentRoundRect(itemX + itemW - 68, curY + 14, 52, 28, 8, tcCol, 140);
+      gfx->drawRoundRect(itemX + itemW - 68, curY + 14, 52, 28, 8, tcCol);
+      drawAaString(itemX + itemW - 42, curY + 28, tcBuf, 1.4f, 0.9f, 9.5f, C_WHITE, true);
+    } else {
+      drawAaString(itemX + itemW - 18, curY + itemH / 2, ">", 1.8f, 1.0f, 10.0f, 0x4A69, true);
+    }
   }
 
   // 底部提示
@@ -223,6 +232,23 @@ void drawWaiting(int st) {
   } else {
     aaDisc((float)(CX - 48), (float)readyY, 4.5f, C_RED);
     drawAaString(CX + 6, readyY, "LINK LOST", 1.8f, 1.05f, 11.5f, C_RED, true);
+  }
+
+  // 阶段一特性：每日通勤路况看板微胶囊 (显示常用地点耗时与路况)
+  int maxCommute = (destItemCount < 2) ? destItemCount : 2;
+  for (int i = 0; i < maxCommute; i++) {
+    if (destItems[i].commuteMin > 0) {
+      char cBuf[48];
+      const char *stTag = (destItems[i].trafficStatus >= 2) ? "拥堵" : (destItems[i].trafficStatus == 1) ? "缓行" : "畅通";
+      uint16_t stCol = (destItems[i].trafficStatus >= 2) ? 0xF9A4 : (destItems[i].trafficStatus == 1) ? 0xFDE0 : 0x05E0;
+      snprintf(cBuf, sizeof(cBuf), "%s %dmin · %s", destItems[i].name[0] ? destItems[i].name : "通勤", destItems[i].commuteMin, stTag);
+      const int capW = 210, capH = 26, capY = readyY + 20;
+      drawTranslucentRoundRect(CX - capW / 2, capY, capW, capH, 13, 0x0000, 180);
+      gfx->drawRoundRect(CX - capW / 2, capY, capW, capH, 13, stCol);
+      aaDisc(CX - capW / 2 + 14, capY + capH / 2, 4.0f, stCol);
+      drawTextUTF8(CX - capW / 2 + 24, capY + 18, cBuf, C_WHITE);
+      break;
+    }
   }
 
   // 4. 经典 Rockstar (R星) 风格五角星按钮 (CX=233, Y=322)

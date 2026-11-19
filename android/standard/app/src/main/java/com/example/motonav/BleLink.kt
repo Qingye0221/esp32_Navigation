@@ -420,6 +420,22 @@ object BleLink {
             handler.post { NaviBridge.exitNavi() }
             return
         }
+        if ((p.size >= 2 && p[0] == "Q" && p[1] == "GAS") || (p.size >= 3 && p[0] == "T" && p[1] == "Q" && p[2] == "GAS")) {
+            handler.post { appContext?.let { AlongRouteSearcher.searchGas(it) } }
+            return
+        }
+        if ((p.size >= 2 && p[0] == "QC" && p[1] == "1") || (p.size >= 3 && p[0] == "T" && p[1] == "QC" && p[2] == "1")) {
+            handler.post { appContext?.let { AlongRouteSearcher.applyCandidateWayPoint(it) } }
+            return
+        }
+        if ((p.size >= 4 && p[0] == "TC?") || (p.size >= 5 && p[0] == "T" && p[1] == "TC?")) {
+            val offset = if (p[0] == "T") 1 else 0
+            val targetId = p[offset + 1].toIntOrNull() ?: 0
+            val lat = p[offset + 2].toDoubleOrNull() ?: Double.NaN
+            val lng = p[offset + 3].toDoubleOrNull() ?: Double.NaN
+            handler.post { appContext?.let { CommuteTrafficWatcher.queryCommute(it, targetId, lat, lng) } }
+            return
+        }
         if (p.size >= 3 && p[0] == "T" && p[1] == "M") { MusicBridge.onScreenEvent(p[2], p.drop(3).joinToString(",")); return }
         if (p.size >= 4 && p[0] == "S") {               // v2.0.1 圆屏帧率统计
             markVerified()

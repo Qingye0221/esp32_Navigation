@@ -15,18 +15,22 @@ object MapProviderManager {
     private var activeProviderType = MapProviderType.AMAP
 
     fun init(context: Context) {
-        val sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val id = sp.getInt(KEY_ACTIVE_PROVIDER, MapProviderType.AMAP.id)
-        activeProviderType = MapProviderType.fromId(id)
-    }
-
-    fun getActiveType(): MapProviderType = activeProviderType
-
-    fun setActiveType(context: Context, type: MapProviderType) {
-        activeProviderType = type
+        // 当前版本第三方开源引擎（OSM/Mapbox）未完全落地，强制使用高德地图
+        activeProviderType = MapProviderType.AMAP
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putInt(KEY_ACTIVE_PROVIDER, type.id)
+            .putInt(KEY_ACTIVE_PROVIDER, MapProviderType.AMAP.id)
+            .apply()
+    }
+
+    fun getActiveType(): MapProviderType = MapProviderType.AMAP
+
+    fun setActiveType(context: Context, type: MapProviderType) {
+        // 暂未开放第三方地图，强制保持高德地图
+        activeProviderType = MapProviderType.AMAP
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_ACTIVE_PROVIDER, MapProviderType.AMAP.id)
             .apply()
     }
 

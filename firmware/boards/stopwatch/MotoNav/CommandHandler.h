@@ -162,6 +162,70 @@ void handleText(const String &m) {
     }
     return;
   }
+  if (m.startsWith("#QA,")) {
+    alongSearching = false;
+    int c1 = m.indexOf(',');
+    int c2 = m.indexOf(',', c1 + 1);
+    int c3 = m.indexOf(',', c2 + 1);
+    int c4 = m.indexOf(',', c3 + 1);
+    if (c1 > 0 && c2 > c1) {
+      alongPoi.status = m.substring(c1 + 1, c2).toInt();
+      if (c3 > c2 && c4 > c3) {
+        String n = m.substring(c2 + 1, c3);
+        strncpy(alongPoi.name, n.c_str(), sizeof(alongPoi.name) - 1);
+        alongPoi.name[sizeof(alongPoi.name) - 1] = '\0';
+        alongPoi.detourM = m.substring(c3 + 1, c4).toInt();
+        alongPoi.distM = m.substring(c4 + 1).toInt();
+      } else {
+        String n = m.substring(c2 + 1);
+        strncpy(alongPoi.name, n.c_str(), sizeof(alongPoi.name) - 1);
+        alongPoi.name[sizeof(alongPoi.name) - 1] = '\0';
+        alongPoi.detourM = 0;
+        alongPoi.distM = 0;
+      }
+      alongPoi.active = true;
+      alongPoi.expireAt = millis() + 7500;
+      navDirty = true;
+      leanDirty = true;
+    }
+    return;
+  }
+  if (m.startsWith("#WT")) {
+    routeWeatherCount = 0;
+    for (int i = 0; i < MAX_WEATHER_POINTS; i++) routeWeatherPts[i].valid = false;
+    if (m.length() > 3 && m.charAt(3) == ',') {
+      int start = 4;
+      while (start < m.length() && routeWeatherCount < MAX_WEATHER_POINTS) {
+        int c1 = m.indexOf(',', start);
+        if (c1 < 0) break;
+        int c2 = m.indexOf(',', c1 + 1);
+        int mVal = m.substring(start, c1).toInt();
+        int tVal = (c2 < 0) ? m.substring(c1 + 1).toInt() : m.substring(c1 + 1, c2).toInt();
+        if (mVal > 0 && tVal > 0) {
+          routeWeatherPts[routeWeatherCount].meterOnRoute = mVal;
+          routeWeatherPts[routeWeatherCount].type = (uint8_t)tVal;
+          routeWeatherPts[routeWeatherCount].valid = true;
+          routeWeatherCount++;
+        }
+        if (c2 < 0) break;
+        start = c2 + 1;
+      }
+    }
+    navDirty = true;
+    return;
+  }
+  if (m.startsWith("#TC,")) {
+    int id = 0, mins = 0, st = 0;
+    if (sscanf(m.c_str(), "#TC,%d,%d,%d", &id, &mins, &st) >= 3) {
+      if (id >= 0 && id < MAX_DEST_ITEMS) {
+        destItems[id].commuteMin = mins;
+        destItems[id].trafficStatus = (uint8_t)st;
+        destItems[id].commuteAt = millis();
+      }
+      navDirty = true;
+    }
+    return;
+  }
   if (m.startsWith("#k")) {
     int c1 = m.indexOf(','), c2 = m.indexOf(',', c1 + 1);
     if (c1 > 0 && c2 > c1) {

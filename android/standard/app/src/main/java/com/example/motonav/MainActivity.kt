@@ -777,11 +777,15 @@ class MainActivity : AppCompatActivity() {
     /** 圆屏显示：地图引擎来源、小地图开关、风格、夜间配色、清爽模式、行程环、弯道上色、走过的路线、预判 */
     private fun mapSection(card: LinearLayout) {
         card.addView(subhead("地图引擎与服务商"))
-        card.addView(segmented(listOf(MapProviderType.AMAP.id to "高德 (国内)", MapProviderType.MAPBOX_OSM.id to "OSM/Mapbox (国际)"),
-            { MapProviderManager.getActiveType().id }) {
-            MapProviderManager.setActiveType(this, MapProviderType.fromId(it))
+        card.addView(segmented(listOf(
+            MapProviderType.AMAP.id to "高德 (国内)",
+            MapProviderType.MAPBOX_OSM.id to "OSM/Mapbox (待实现)"
+        ), { MapProviderType.AMAP.id }) {
+            if (it != MapProviderType.AMAP.id) {
+                Toast.makeText(this, "OSM/Mapbox 国际引擎正在适配中，暂未开放切换", Toast.LENGTH_SHORT).show()
+            }
         })
-        card.addView(note("国内出行首选高德地图；出海/国外环境推荐 OpenStreetMap / Mapbox"))
+        card.addView(note("当前版本仅支持高德地图；OSM/Mapbox 国际引擎仍在适配中，暂未开放切换"))
         card.addView(divider(top = 10))
 
         card.addView(settingRow("显示小地图", "关掉后圆屏只显示大箭头", toggle({ MapFeeder.enabled }) { MapFeeder.setEnabled(it) }))

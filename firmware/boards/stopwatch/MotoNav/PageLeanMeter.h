@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "LeanAngleMeter.h"
 #include "UiModern.h"
+#include "AlongBanner.h"
 
 extern bool dragging;
 
@@ -295,6 +296,7 @@ void drawLeanMeter() {
 
   drawAaString(CX_CENTER, LCD_HEIGHT - 42.0f * K, "DOUBLE TAP RESET · HOLD CALIB", 1.40f * K, 0.80f * K, 8.8f * K, 0x528A, true);
 
+  drawAlongPoiBanner();
   drawPageDots();
   needFlush = true;
 }

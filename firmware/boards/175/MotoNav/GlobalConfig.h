@@ -15,6 +15,29 @@ int slopePct = 0;
 int climbAccumM = 0;
 bool altValid = false;
 
+// ===== 阶段一特性：一键沿途顺路搜 (加油站 / 维修点 / 服务区) =====
+struct AlongPoiInfo {
+  bool active = false;
+  int status = 0;       // 1 = 找到, 0 = 未找到
+  char name[64] = {0};  // 加油站名称
+  int detourM = 0;      // 偏离米数
+  int distM = 0;        // 沿途米数
+  unsigned long expireAt = 0;
+};
+AlongPoiInfo alongPoi;
+bool alongSearching = false;
+unsigned long alongSearchUntil = 0;
+
+// ===== 阶段一特性：沿途极端天气智能预警 =====
+#define MAX_WEATHER_POINTS 8
+struct RouteWeatherPoint {
+  int32_t meterOnRoute = 0; // 路线桩号（米）
+  uint8_t type = 0;         // 1=雨, 2=雷电, 3=大雾, 4=降雪, 5=大风
+  bool valid = false;
+};
+RouteWeatherPoint routeWeatherPts[MAX_WEATHER_POINTS];
+int routeWeatherCount = 0;
+
 // ===== 颜色（RGB565）=====
 #define C_BLACK  0x0000
 #define C_WHITE  0xFFFF

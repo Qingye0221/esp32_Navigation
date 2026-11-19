@@ -4,6 +4,7 @@ extern int coverFlySpeed;
 #include <Arduino.h>
 #include "TouchDrvCSTXXX.hpp"
 #include "BoardStopWatchInit.h"
+#include "AlongBanner.h"
 
 // ================= v5.1 来电显示 =================
 // 手机来电时整屏显示：上面 “INCOMING CALL”，中间绿色电话图标带往外扩散的波纹，下面是名字（手机渲染好的
@@ -539,6 +540,14 @@ void touchPoll() {
       touchVectorToCanvas(tdx, tdy);
       int canvasX = (int)lroundf(CX + tdx);
       int canvasY = (int)lroundf(CX + tdy);
+
+      if (alongPoiTap(canvasX, canvasY)) { dragAbort(); touchEat = false; return; }
+      if (page == 0 && inNav && pressDuration >= 1200 && abs(touchX1 - touchX0) < 35 && abs(touchY1 - touchY0) < 35) {
+        triggerAlongGasSearch();
+        dragAbort();
+        touchEat = false;
+        return;
+      }
 
       if (page == 2 && abs(touchX1 - touchX0) < 36 && abs(touchY1 - touchY0) < 36) { musicTap(canvasX, canvasY); CompanionMode::startVibration(65, 22); }
       if (page == 0 && !inNav && abs(touchX1 - touchX0) < 36 && abs(touchY1 - touchY0) < 36) { waitingScreenTap(canvasX, canvasY); CompanionMode::startVibration(65, 22); }

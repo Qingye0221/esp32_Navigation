@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "RasterContinuity.h"
 #include "CameraIcons.h"
+#include "AlongBanner.h"
 
 void drawTrafficLightLab(uint32_t now);
 void drawCompassBlip(float px, float py, bool outside);
@@ -2440,6 +2441,62 @@ void drawTraffic(float cx, float cy, float sc, float cs, float sn, float viewR, 
   }
 }
 
+// ================= v6.1 风格特效投影 =================
+static inline void projXY(float x, float y, float cx, float cy, float sc, float cs, float sn, float &px, float &py) {
+  px = CX + sc * ((x - cx) * cs - (y - cy) * sn);
+  py = effectiveMapPy - sc * ((x - cx) * sn + (y - cy) * cs);
+}
+
+// 阶段一特性：沿途极端天气（雨/雪/雷/雾/风）在路线轨迹沿线的微型符号绘制
+void drawRouteWeatherIcons(float cx, float cy, float sc, float cs, float sn) {
+  if (routeWeatherCount == 0 || routeN < 2 || routeFrame != posFrame) return;
+  for (int i = 0; i < routeWeatherCount; i++) {
+    if (!routeWeatherPts[i].valid) continue;
+    float u = routeUAt((float)routeWeatherPts[i].meterOnRoute);
+    if (u <= 0.0f) continue;
+    int idx = (int)u;
+    float frac = u - (float)idx;
+    float wx = 0, wy = 0;
+    if (idx < routeN - 1) {
+      wx = routeX[idx] + (routeX[idx + 1] - routeX[idx]) * frac;
+      wy = routeY[idx] + (routeY[idx + 1] - routeY[idx]) * frac;
+    } else {
+      wx = routeX[routeN - 1]; wy = routeY[routeN - 1];
+    }
+    float px = 0, py = 0;
+    projXY(wx, wy, cx, cy, sc, cs, sn, px, py);
+    float edx = px - CX, edy = py - CX;
+    if (edx * edx + edy * edy > 200.0f * 200.0f) continue;
+
+    float ix = px + 14.0f, iy = py - 14.0f;
+    uint8_t t = routeWeatherPts[i].type;
+    uint16_t border = (t == 1) ? 0x03DF : (t == 2) ? 0xFDE0 : (t == 4) ? C_WHITE : 0x7BEF;
+    aaDisc(ix, iy, 11.0f, C_BLACK);
+    gfx->drawCircle((int)ix, (int)iy, 10, border);
+
+    if (t == 1) { // 雨：三条微雨丝
+      gfx->drawLine((int)ix - 4, (int)iy - 3, (int)ix - 2, (int)iy + 3, 0x07FF);
+      gfx->drawLine((int)ix - 1, (int)iy - 4, (int)ix + 1, (int)iy + 2, 0x07FF);
+      gfx->drawLine((int)ix + 2, (int)iy - 3, (int)ix + 4, (int)iy + 3, 0x07FF);
+    } else if (t == 2) { // 雷电：折线闪电
+      gfx->drawLine((int)ix + 1, (int)iy - 5, (int)ix - 2, (int)iy, 0xFDE0);
+      gfx->drawLine((int)ix - 2, (int)iy, (int)ix + 2, (int)iy, 0xFDE0);
+      gfx->drawLine((int)ix + 2, (int)iy, (int)ix - 1, (int)iy + 5, 0xFDE0);
+    } else if (t == 4) { // 雪：雪花十字
+      gfx->drawLine((int)ix - 4, (int)iy, (int)ix + 4, (int)iy, C_WHITE);
+      gfx->drawLine((int)ix, (int)iy - 4, (int)ix, (int)iy + 4, C_WHITE);
+      gfx->drawPixel((int)ix - 2, (int)iy - 2, C_WHITE);
+      gfx->drawPixel((int)ix + 2, (int)iy - 2, C_WHITE);
+      gfx->drawPixel((int)ix - 2, (int)iy + 2, C_WHITE);
+      gfx->drawPixel((int)ix + 2, (int)iy + 2, C_WHITE);
+    } else { // 雾 / 风：双横线
+      gfx->drawFastHLine((int)ix - 4, (int)iy - 2, 9, 0xCE79);
+      gfx->drawFastHLine((int)ix - 3, (int)iy + 2, 7, 0xCE79);
+    }
+    obsAdd((int)ix - 11, (int)iy - 11, (int)ix + 11, (int)iy + 11);
+  }
+}
+
 // v5.0 地图上方/下方的提示条：半透明深色底 + 文字
 void drawBanner(const String &t, int y, uint16_t col) {
   int w = t.length() * 12 + 24;
@@ -2738,11 +2795,6 @@ void drawVignette(float r0, float r1, int maxDark) {
 }
 
 // ================= v6.1 风格特效 =================
-static inline void projXY(float x, float y, float cx, float cy, float sc, float cs, float sn, float &px, float &py) {
-  px = CX + sc * ((x - cx) * cs - (y - cy) * sn);
-  py = effectiveMapPy - sc * ((x - cx) * sn + (y - cy) * cs);
-}
-
 // 蓝图：跟着地图走的网格，每 50 米一条线
 void drawBlueprintGrid(float cx, float cy, float sc, float cs, float sn, float viewR) {
   const float G = 50;
@@ -3036,6 +3088,7 @@ void drawMapFrame() {
     drawRouteRange(split, (float)(routeN - 1), cx, cy, sc, cs, sn, viewR, w0, w1, C_ROUTE2, C_ROUTE);
     if (!dragon && styleIdx()!=ST_MINIMAL && curveOn && routeCurv) drawRouteCurved(split, (float)(routeN - 1), cx, cy, sc, cs, sn, viewR, w1);   // v6.1
     if (!dragon && styleIdx()!=ST_MINIMAL) drawTraffic(cx, cy, sc, cs, sn, viewR, w0, w1, split);                       // v5.0 路况颜色
+    if (!dragon && styleIdx()!=ST_MINIMAL) drawRouteWeatherIcons(cx, cy, sc, cs, sn);   // 阶段一特性：沿线极端天气图标标绘
   }
   profMark(2);
   obsN = 0;                                             // v3.8 占位框从头登记
@@ -3094,6 +3147,7 @@ void drawMapFrame() {
   drawMapZoomSlider(t);                                 // 屏幕右侧边缘半透明缩放滑轨与加减图标
   drawMapZoomHint(t);                                   // 缩放倍率 HUD 浮层
   drawArriveBanner(t);                                  // 到达目的地顶部卡片提示
+  drawAlongPoiBanner(t);                                // 阶段一特性：沿途顺路加油卡片与加途径点改线提示
   // v2.9 小地图里不画顶部的蓝牙小圆点（会和 N 标记重叠；能收到地图就说明连着）
   needFlush = true;
   mapFrames++;

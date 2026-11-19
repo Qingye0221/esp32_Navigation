@@ -18,6 +18,7 @@ import com.amap.api.navi.INaviInfoCallback
 import com.amap.api.navi.NaviSetting
 import com.amap.api.navi.model.AMapNaviCameraInfo
 import com.amap.api.navi.model.AMapNaviLocation
+import com.amap.api.navi.model.AMapNaviPath
 import com.amap.api.navi.model.NaviInfo
 import com.amap.api.services.core.ServiceSettings
 import java.lang.reflect.Proxy
@@ -134,6 +135,7 @@ object NaviBridge {
     private var camMinDist = Int.MAX_VALUE
     private var myLat = Double.NaN
     private var myLng = Double.NaN
+    fun currentPosition() = doubleArrayOf(myLat, myLng)
     fun trafficLightPosition()=doubleArrayOf(myLat,myLng)
     fun trafficLightContextActive()=active && uiHasInfo && !uiArrived && !rerouting && !gpsWeakSent &&
         arrivalSession.acceptsGuidance(arrivalSession.generation()) && !navigationIsSimulation()
@@ -149,6 +151,17 @@ object NaviBridge {
     private var lightAt = 0L
     private var lightApproachKey = ""
     private const val LIGHT_SHOW_M = 300      // 300 米以内才在圆屏上显示
+
+    // ===== 阶段一特性：实时海拔高度、累计爬升与路段坡度 =====
+    private var lastAlt = Double.NaN
+    private var lastAltLat = Double.NaN
+    private var lastAltLng = Double.NaN
+    private var smoothSlope = 0.0
+    private var climbTotalM = 0.0
+    private var lastAltMsg = ""
+    private var lastSentAltM = -9999
+    private var lastSentSlpInt = -9999
+    private var lastAltSentAt = 0L
 
     private fun now() = SystemClock.elapsedRealtime()
 
@@ -190,6 +203,8 @@ object NaviBridge {
         ServiceSettings.updatePrivacyAgree(c, true)
     }
 
+    var appContext: Context? = null
+
     /** v3.0 准备一次新的导航：拿到高德导航对象，挂上我们的“旁听”回调，清空上次的状态 */
     fun attach(context: Context): AMapNavi? {
         if(SingleEngineSession.owns) return null // Never construct the second engine while the native-only session owns guidance.
@@ -197,6 +212,7 @@ object NaviBridge {
         CarNavSync.stop()
         WebMotorGuide.stop()
         val c = context.applicationContext
+        appContext = c
         endCruiseQuietly()                                                       // v4.7 开始导航前先结束巡航
         // Close the previous trip BEFORE calculating/arming a new one. Resetting
         // only our UI leaves the SDK emulator running and a later start may fail.
@@ -239,6 +255,7 @@ object NaviBridge {
         arrivalSession.cancel(epoch)
         try { navi?.stopNavi() } catch (_: Exception) {}
         ShareGuide.stop()                                                        // v4.5
+        AlongWeatherMonitor.clearWeather()
         handler.post { if (arrivalSession.isCurrent(epoch)) resetState() }
         finish("C", "已退出导航", epoch)
     }
@@ -702,6 +719,40 @@ object NaviBridge {
                 lastSpeedMsg = m
                 BleLink.send(m)
             }
+            // 实时海拔与路段坡度计算
+            val rawAlt = try { loc.altitude } catch (_: Throwable) { 0.0 }
+            if (rawAlt > -200 && rawAlt < 9000 && c != null && !c.latitude.isNaN() && !c.longitude.isNaN()) {
+                if (!lastAltLat.isNaN() && !lastAlt.isNaN()) {
+                    val res = FloatArray(1)
+                    android.location.Location.distanceBetween(lastAltLat, lastAltLng, c.latitude, c.longitude, res)
+                    val distM = res[0]
+                    if (distM >= 10.0) {
+                        val dAlt = rawAlt - lastAlt
+                        if (dAlt > 0) climbTotalM += dAlt
+                        val curSlope = ((dAlt / distM) * 100.0).coerceIn(-35.0, 35.0)
+                        smoothSlope = smoothSlope * 0.65 + curSlope * 0.35
+                        lastAlt = rawAlt
+                        lastAltLat = c.latitude
+                        lastAltLng = c.longitude
+                    }
+                } else {
+                    lastAlt = rawAlt
+                    lastAltLat = c.latitude
+                    lastAltLng = c.longitude
+                }
+                val altM = rawAlt.roundToInt()
+                val slpInt = smoothSlope.roundToInt()
+                val climbInt = climbTotalM.roundToInt()
+                val altMsg = "#a,$altM,$slpInt,$climbInt"
+                val tNow = now()
+                if (altMsg != lastAltMsg && (kotlin.math.abs(altM - lastSentAltM) >= 3 || kotlin.math.abs(slpInt - lastSentSlpInt) >= 2 || (tNow - lastAltSentAt >= 3500L))) {
+                    lastAltMsg = altMsg
+                    lastSentAltM = altM
+                    lastSentSlpInt = slpInt
+                    lastAltSentAt = tNow
+                    BleLink.send(altMsg)
+                }
+            }
         }
     }
 
@@ -951,10 +1002,13 @@ object NaviBridge {
                 if (method.name !in listOf("hashCode","equals","toString") && !arrivalSession.isOpen(epoch))
                     return@newProxyInstance defaultValue(method.returnType)
                 when (method.name) {
-                    "onStartNavi" -> if (usingComponent) {
+                    "onStartNavi" -> {
                         val type = (args?.getOrNull(0) as? Number)?.toInt() ?: 0
                         handler.post {
-                            if (arrivalSession.begin(epoch,type!=1)) RideRecorder.start("导航","导航组件",type!=1)
+                            if (usingComponent && arrivalSession.begin(epoch,type!=1)) RideRecorder.start("导航","导航组件",type!=1)
+                            lastTrafficAt = 0L
+                            pushTraffic()
+                            navi?.naviPath?.let { p -> appContext?.let { ctx -> AlongWeatherMonitor.checkRouteWeather(ctx, p.coordList, p.allLength) } }
                         }
                     }
                     "onNaviInfoUpdate" -> (args?.getOrNull(0) as? NaviInfo)?.let { onNaviInfo(it,epoch) }
@@ -973,7 +1027,19 @@ object NaviBridge {
                     // v3.8 “手机系统语音”模式：高德把播报文字交给我们念；v5.1 高德自己念时用它来压低音乐
                     "onGetNavigationText" -> NaviVoice.onNaviText(args?.lastOrNull { it is String } as? String, usingComponent)
                     // v3.0 算路结果交给选路线页面
-                    "onCalculateRouteSuccess" -> { val cb = routeResults.current(); val a = args?.getOrNull(0); handler.post { if (arrivalSession.isOpen(epoch)) { if(cb!=null && routeResults.current()===cb)cb(true,a); setRerouting(false); ShareGuide.onCalcDone(true) } } }
+                    "onCalculateRouteSuccess" -> {
+                        val cb = routeResults.current(); val a = args?.getOrNull(0)
+                        handler.post {
+                            if (arrivalSession.isOpen(epoch)) {
+                                if(cb!=null && routeResults.current()===cb)cb(true,a)
+                                setRerouting(false)
+                                ShareGuide.onCalcDone(true)
+                                lastTrafficAt = 0L
+                                pushTraffic()
+                                navi?.naviPath?.let { p -> appContext?.let { ctx -> AlongWeatherMonitor.checkRouteWeather(ctx, p.coordList, p.allLength) } }
+                            }
+                        }
+                    }
                     "onCalculateRouteFailure" -> { val cb = routeResults.current(); val a = args?.getOrNull(0); handler.post { if (arrivalSession.isOpen(epoch)) { if(cb!=null && routeResults.current()===cb)cb(false,a); setRerouting(false); ShareGuide.onCalcDone(false) } } }
                     // v4.5 偏航：按分享路线导航时，高德重算完我们再按原路线重新规划；v4.9 圆屏显示“重新规划中”
                     "onReCalculateRouteForYaw" -> handler.post { setRerouting(true); ShareGuide.onYaw() }
@@ -1070,25 +1136,37 @@ object NaviBridge {
     }
 
     /**
-     * 路况：从高德路线上读出每一段的拥堵状态（2 缓行、3 拥堵、4 严重拥堵），
-     * 只发不畅通的路段："#u,起点米,终点米,状态,..."（米 = 离路线起点）
+     * 路况：从高德路线上读出每一段的路况状态（1 畅通、2 缓行、3 拥堵、4 严重拥堵），
+     * 发送格式："#u,起点米,终点米,状态,..."（米 = 离路线起点）
+     * 连续相同状态的路段会自动合并。
      */
-    private fun pushTraffic() {
+    fun pushTraffic(targetPath: AMapNaviPath? = null) {
         lastTrafficAt = now()
-        val path = navi?.naviPath ?: return
-        val list = Refl.call(path, "getTrafficStatuses").second as? List<*> ?: return
+        val path = targetPath ?: navi?.naviPath ?: return
+        val list = (Refl.call(path, "getTrafficStatuses").second as? List<*>)
+            ?: (Refl.call(path, "trafficStatuses").second as? List<*>)
         val segs = ArrayList<IntArray>()
         var pos = 0
-        for (o in list) {
-            val len = Refl.int(o, "getLength") ?: continue
-            val st = Refl.int(o, "getStatus") ?: 0
-            if (st >= 2 && len > 0) {
-                val last = segs.lastOrNull()
-                if (last != null && last[2] == st && last[1] >= pos - 5) last[1] = pos + len
-                else segs.add(intArrayOf(pos, pos + len, st))
+        if (list != null && list.isNotEmpty()) {
+            for (o in list) {
+                val len = Refl.int(o, "getLength", "length") ?: continue
+                val rawSt = Refl.int(o, "getStatus", "status") ?: 1
+                val st = rawSt.coerceIn(1, 4)
+                if (len > 0) {
+                    val last = segs.lastOrNull()
+                    if (last != null && last[2] == st && last[1] >= pos - 5) {
+                        last[1] = pos + len
+                    } else {
+                        segs.add(intArrayOf(pos, pos + len, st))
+                    }
+                }
+                pos += len
             }
-            pos += len
+        } else if (path.allLength > 0) {
+            // 没有拥堵列表，默认全线畅通
+            segs.add(intArrayOf(0, path.allLength, 1))
         }
+
         val sb = StringBuilder("#u")
         for (sg in segs) {
             val part = ",${sg[0]},${sg[1]},${sg[2]}"
@@ -1096,7 +1174,10 @@ object NaviBridge {
             sb.append(part)
         }
         val m = sb.toString()
-        if (m != lastTrafficMsg) { lastTrafficMsg = m; BleLink.send(m) }
+        if (m != lastTrafficMsg) {
+            lastTrafficMsg = m
+            BleLink.send(m)
+        }
     }
 
     // ================= v4.7 巡航模式 + 道路安全提示 =================

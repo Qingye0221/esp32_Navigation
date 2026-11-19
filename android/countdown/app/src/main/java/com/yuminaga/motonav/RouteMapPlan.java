@@ -52,6 +52,14 @@ public final class RouteMapPlan {
         return Math.max(0,result);
     }
     public int target(double progress, boolean initial) {
-        return Math.max(0, Math.min(nodes.size()-1, (int)Math.floor((progress+(initial ? STEP/2 : LOOK_AHEAD))/STEP)));
+        return target(progress, initial, 0, 0.7);
+    }
+    public int target(double progress, boolean initial, int kmh, double userZoom) {
+        double lookAhead = LOOK_AHEAD;
+        if (!initial) {
+            if (kmh >= 60 || userZoom < 0.6) lookAhead = 1050.0;
+            else if (kmh >= 30 || userZoom < 0.8) lookAhead = 920.0;
+        }
+        return Math.max(0, Math.min(nodes.size()-1, (int)Math.floor((progress+(initial ? STEP/2 : lookAhead))/STEP)));
     }
 }

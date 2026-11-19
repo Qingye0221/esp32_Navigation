@@ -11,6 +11,9 @@ struct DestItem {
   char name[64]; // 名称 (如 "Home", "Work", "Mall", "家", "公司")
   char addr[64]; // 简短地址
   bool valid;
+  int commuteMin = -1;         // 阶段一：预计通勤耗时（分钟，-1 为未获取）
+  uint8_t trafficStatus = 0;   // 阶段一：路况等级 0 畅通, 1 缓行, 2 拥堵
+  unsigned long commuteAt = 0; // 最近更新时间戳
 };
 
 extern DestItem destItems[MAX_DEST_ITEMS];
