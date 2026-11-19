@@ -264,10 +264,12 @@ void showPageAnimated(int target, int sx, int sy) {
   dragHoriz = sx != 0 || sy == 0;
   dragSign = dragHoriz ? (sx ? sx : 1) : sy;
   dragTarget = target;
+  if (target == 0) mapZoomBtnUntil = millis() + 10000;
   if (!slidePrepare(target)) { page = target; renderPage(target); needFlush = true; return; }
   dragging = true;
   slideAnimate(0, dragHoriz ? LCD_WIDTH : LCD_HEIGHT, 220); // 优化为黄金 220ms，利落丝滑
   slideCommit();
+  if (target == 0) mapZoomBtnUntil = millis() + 10000;
 }
 
 // 音乐页保持显示，取消路口自动切回导航，便于连续切歌与沉浸式歌词浏览

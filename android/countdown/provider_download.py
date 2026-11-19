@@ -52,7 +52,7 @@ def resolve_provider(provider=None, *, offline=False):
     for attempt in range(1, 4):
         temporary = None
         try:
-            request = Request(spec['url'], headers={'User-Agent': 'MotoNav-Countdown-Builder/1.0'})
+            request = Request(spec['url'], headers={'User-Agent': 'esp32Nav-Countdown-Builder/1.0'})
             with urlopen(request, timeout=90) as response, tempfile.NamedTemporaryFile(
                     dir=destination.parent, prefix='provider-', suffix='.part', delete=False) as output:
                 temporary = Path(output.name)

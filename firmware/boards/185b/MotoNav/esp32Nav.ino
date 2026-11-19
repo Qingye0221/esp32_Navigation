@@ -339,8 +339,8 @@ bool fastFlushOn = true;          // v2.6 快速刷屏
 #define TEXT_R       200   // 文字必须在这个半径以内（圆环内沿约 215）
 
 // ===== 蓝牙：手机端必须用同样的名字和 UUID =====
-#define DEVICE_NAME  "MotoNav"
-String bleName = DEVICE_NAME;        // v7.0 实际蓝牙名 "MotoNav-XXXX"（XXXX = 蓝牙地址最后两个字节），开机时算好
+#define DEVICE_NAME  "esp32Nav"
+String bleName = DEVICE_NAME;        // v7.0 实际蓝牙名 "esp32Nav-XXXX"（XXXX = 蓝牙地址最后两个字节），开机时算好
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define RX_UUID      "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define TX_UUID      "6e400003-b5a3-f393-e0a9-e50e24dcca9e"   // v2.0 圆屏 → 手机通知
@@ -552,7 +552,7 @@ void hidMediaTick() {
 }
 void initMediaHid(BLEServer *server) {
   mediaHid = new BLEHIDDevice(server);
-  mediaHid->manufacturer()->setValue("MotoNav");
+  mediaHid->manufacturer()->setValue("esp32Nav");
   // DIY/private device identity, not a borrowed keyboard vendor/product ID.
   const uint8_t identity[7] = {0x01, 0xFF, 0xFF, 0x01, 0x00, 0x00, 0x01};
   mediaHid->deviceInfo()->getCharacteristic(BLEUUID((uint16_t)0x2A50))->setValue(identity, sizeof(identity));

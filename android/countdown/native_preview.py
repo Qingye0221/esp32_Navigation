@@ -1,4 +1,4 @@
-"""Pinned HMI-only change: route choice must wait for MotoNav's Start button.
+"""Pinned HMI-only change: route choice must wait for esp32Nav's Start button.
 
 9.5.13 libautonavi.so, AArch64 InitStartCountDown() at VA/file 0xd612c0.
 The function is void; its prologue and unique __FUNCTION__ text were checked

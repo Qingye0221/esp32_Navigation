@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ======================================================================
-echo  MotoNav Stopwatch: 固件编译并合并生成 M5Burner 发布包
+echo  esp32Nav Stopwatch: 固件编译并合并生成 M5Burner 发布包
 echo ======================================================================
 
 set PIO_EXE="%USERPROFILE%\.platformio\penv\Scripts\platformio.exe"
@@ -36,7 +36,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 echo ======================================================================
 echo  [完成] 固件已保存至 release/ 目录：
-echo  - MotoNav_stopwatch_factory_0x0000.bin  (可直接发布在 M5Burner 从 0x0000 烧录)
-echo  - MotoNav_stopwatch_app_ota_0x10000.bin (仅主程序，用于 OTA / 0x10000 烧录)
+echo  - esp32Nav_stopwatch_factory_0x0000.bin  (可直接发布在 M5Burner 从 0x0000 烧录)
+echo  - esp32Nav_stopwatch_app_ota_0x10000.bin (仅主程序，用于 OTA / 0x10000 烧录)
 echo ======================================================================
 pause

@@ -22,6 +22,6 @@ test -f "$taskApp/PlugIns/MotoNavShare.appex/MotoNavShare"
 taskStage="$(mktemp -d "$taskOutput/stage.XXXXXX")"
 mkdir -p "$taskStage/Payload"
 ditto "$taskApp" "$taskStage/Payload/MotoNav.app"
-(cd "$taskStage" && zip -qry "$taskOutput/MotoNav-0.15.0-unsigned.ipa" Payload)
-(cd "$taskOutput" && shasum -a 256 MotoNav-0.15.0-unsigned.ipa > SHA256SUMS.txt)
-echo "已生成：$taskOutput/MotoNav-0.15.0-unsigned.ipa（仍需用户签名安装）"
+(cd "$taskStage" && zip -qry "$taskOutput/esp32Nav-0.15.0-unsigned.ipa" Payload)
+(cd "$taskOutput" && shasum -a 256 esp32Nav-0.15.0-unsigned.ipa > SHA256SUMS.txt)
+echo "已生成：$taskOutput/esp32Nav-0.15.0-unsigned.ipa（仍需用户签名安装）"

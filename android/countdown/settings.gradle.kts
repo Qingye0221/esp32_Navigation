@@ -1,4 +1,4 @@
-// MotoNav 一键打包工程（v1.0）：不需要 Android Studio，双击「一键打包.bat」即可
+// esp32Nav 一键打包工程（v1.0）：不需要 Android Studio，双击「一键打包.bat」即可
 // 国内下载慢：先走阿里云镜像，再走官方仓库
 pluginManagement {
     repositories {
@@ -19,5 +19,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "MotoNav"
+rootProject.name = "esp32Nav"
 include(":app")

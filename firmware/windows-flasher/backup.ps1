@@ -1,6 +1,6 @@
-﻿$ErrorActionPreference='Stop'
+$ErrorActionPreference='Stop'
 try {
-    Write-Host '读取当前整片16MB Flash。已刷MotoNav的设备备份出来就是当前MotoNav，不是原厂固件。'
+    Write-Host '读取当前整片16MB Flash。已刷esp32Nav的设备备份出来就是当前esp32Nav，不是原厂固件。'
     $taskPorts=@([IO.Ports.SerialPort]::GetPortNames() | Sort-Object)
     Write-Host ('当前串口：'+($taskPorts -join '、'))
     $taskPort=(Read-Host '输入待备份圆屏的COM号；Q退出').Trim().ToUpperInvariant()

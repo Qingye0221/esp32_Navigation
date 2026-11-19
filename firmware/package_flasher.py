@@ -16,7 +16,8 @@ def main():
     if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?',version):raise ValueError('Unsafe firmware version')
     if 'rebel' in version.lower() or (source/'resources/RebelBootAsset.h').exists():raise ValueError('Public package must use generic boot resources')
     if 'RebelBootAsset' in (source/'BootAnimation.h').read_text('utf8'):raise ValueError('Private boot include found')
-    dist=ROOT/'firmware/dist/175/panel0';prefix=f'MotoNav_universal_1.75_v{version}_panel0'
+    dist=ROOT/'firmware/dist/175/panel0'
+    prefix=f'esp32Nav_universal_1.75_v{version}_panel0' if (dist/f'esp32Nav_universal_1.75_v{version}_panel0_manifest.json').exists() else f'MotoNav_universal_1.75_v{version}_panel0'
     manifest=dist/(prefix+'_manifest.json');meta=json.loads(manifest.read_text('utf8'))
     images={}
     for item in meta['files']:
@@ -26,7 +27,7 @@ def main():
         images['app' if '_app_' in path.name else 'full']=path
     if images['full'].read_bytes()[0x10000:]!=images['app'].read_bytes():raise ValueError('Unexpected application offset')
     out=ROOT/'output/firmware'/version;out.mkdir(parents=True,exist_ok=True)
-    name=f'MotoNav-1.75-v{version}-Universal-Flasher';package=out/name
+    name=f'esp32Nav-1.75-v{version}-Universal-Flasher';package=out/name
     if package.exists():
         if not package.resolve().is_relative_to(out.resolve()):raise ValueError('Unsafe output path')
         shutil.rmtree(package)
@@ -57,15 +58,15 @@ def main():
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for p in sorted(package.rglob('*')):
             if p.is_file():z.write(p,p.relative_to(out).as_posix())
-    source_zip=out/f'MotoNav-Firmware-Source-1.75-v{version}.zip'
+    source_zip=out/f'esp32Nav-Firmware-Source-1.75-v{version}.zip'
     with zipfile.ZipFile(source_zip,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for base in ['firmware/boards/175','firmware/libraries','firmware/tests','firmware/windows-flasher','licenses']:
             for p in sorted((ROOT/base).rglob('*')):
                 if p.is_file() and not any(x in p.parts for x in ['__pycache__','.build','build']) and p.suffix not in ['.pyc','.exe','.pdb']:
-                    z.write(p,'MotoNav/'+p.relative_to(ROOT).as_posix())
+                    z.write(p,'esp32Nav/'+p.relative_to(ROOT).as_posix())
         for rel in ['LICENSE.md','firmware/README.md','firmware/build.py','firmware/build.ps1','firmware/package_flasher.py','firmware/flash_macos.py','一键烧录固件.command',f'docs/RELEASE-FIRMWARE-{version}.md']:
-            z.write(ROOT/rel,'MotoNav/'+rel)
-    flat=out/f'MotoNav-universal-firmware-{version}.zip'
+            z.write(ROOT/rel,'esp32Nav/'+rel)
+    flat=out/f'esp32Nav-universal-firmware-{version}.zip'
     with zipfile.ZipFile(flat,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for p in [*images.values(),manifest]:z.write(p,'firmware/dist/175/panel0/'+p.name)
     # Loose images are useful for existing flashing tools, without redownloading a whole tool bundle.

@@ -377,7 +377,8 @@ void parseRasterLegacy(const uint8_t *p, uint32_t len) {
   int32_t x0 = rd32(p + 2), y0 = rd32(p + 6);
   int w = rdu16(p + 10), h = rdu16(p + 12), mm = rdu16(p + 14);
   bool hasPal = (mm & 0x8000) != 0;
-  mm &= 0x7FFF;
+  mm &= 0x0FFF;
+  if (mm > 0 && mm < 1000) mm *= 10;
   uint16_t palNew[16];
   if (hasPal) {
     if (len < 48) return;
@@ -574,8 +575,8 @@ void helperLoop(void *) {
 void helperInit() {
   helpGo = xSemaphoreCreateBinary();
   helpDone = xSemaphoreCreateBinary();
-  // v5.8 优先级比推屏任务高：画底图只要几毫秒，推屏晚一点开始没关系（它不卡画面）
-  if (xTaskCreatePinnedToCore(helperLoop, "help", 4096, nullptr, 3, &helperTask, 0) != pdPASS) helperTask = nullptr;   // v5.8 优先级 1 → 3
+  // 优先级(2)低于推屏任务 flushTask(4)，确保推屏一气呵成推完整帧，不因被辅助渲染抢占而撕裂
+  if (xTaskCreatePinnedToCore(helperLoop, "help", 4096, nullptr, 2, &helperTask, 0) != pdPASS) helperTask = nullptr;
 }
 
 // 把 [y0, y1) 这些行分给两个核心：v6.0 主核心画上半，另一个核心画下半（圆形的东西上下对称，活一样多）
@@ -688,6 +689,7 @@ static inline uint16_t sampleRasterBilinear(int32_t U, int32_t V, const uint16_t
   return colCur;
 }
 
+__attribute__((optimize("O3")))
 void rasterRows(int y0, int y1, int step) {
   uint16_t *fb = RM.fb;
   const uint16_t *pal = RM.pal;
@@ -1501,6 +1503,7 @@ static inline void viceBlendPixel(uint16_t *row, int x, uint16_t color, float co
   row[x] = alpha >= 256 ? color : blendF(row[x], color, alpha);
 }
 
+__attribute__((optimize("O3")))
 void viceAAQuad(const float *px, const float *py, uint16_t color) {
   VicePlane plane[4];
   float cx = 0, cy = 0, ymin = py[0], ymax = py[0];
@@ -1561,6 +1564,7 @@ void viceAAQuad(const float *px, const float *py, uint16_t color) {
   }
 }
 
+__attribute__((optimize("O3")))
 void viceAACircle(float cx, float cy, float radius, uint16_t color) {
   uint16_t *fb = gfx->getFramebuffer();
   int ya = max(0, (int)floorf(cy - radius - 1)), yb = min(LCD_HEIGHT - 1, (int)ceilf(cy + radius + 1));
@@ -1588,6 +1592,7 @@ void viceAACircle(float cx, float cy, float radius, uint16_t color) {
   }
 }
 
+__attribute__((optimize("O3")))
 void mapPolyline(const float *xs, const float *ys, int n, float w, uint16_t c, bool caps) {
   bool aa = (styleIdx() != ST_PIXEL);
   if (aa) initViceSampling();
@@ -1673,55 +1678,85 @@ void drawMapZoomSlider(uint32_t now) {
   uint16_t *fb = gfx->getFramebuffer();
   if (!fb) return;
 
-  bool isActive = mapZoomActive || (now < mapZoomHintUntil);
-  uint8_t bgAlpha = isActive ? 190 : 100;
-  uint16_t iconColor = isActive ? C_WHITE : 0xCE59; // 活跃时亮白，平时半透明淡灰
-  uint16_t borderCol = isActive ? 0x07E0 : 0x2124; // 活跃时荧光绿边框，平时深灰边框
+  // 1. 刚进入地图/刚开始导航/切换页面时的 10 秒引导展示逻辑
+  static int lastPage = -1;
+  static bool wasInNav = false;
+  static bool wasCruise = false;
+  if (page == 0) {
+    if (lastPage != 0 || (inNav && !wasInNav) || (cruiseOn && !wasCruise)) {
+      mapZoomBtnUntil = now + 10000; // 只要进入地图或开始导航，必定显示 10 秒加减号
+      navDirty = true;
+    }
+  }
+  lastPage = page;
+  wasInNav = inNav;
+  wasCruise = cruiseOn;
 
-  const float R_slider = 206.0f; // 紧贴右侧转弯进度环内侧 (R=219)
-  // 加号在上方 70 度，减号在下方 110 度 (3点钟为 90 度)
-  // sin(70°) = 0.9397f, cos(70°) = 0.3420f
-  const int plusX = (int)lroundf(CX + R_slider * 0.9397f);   // ~427
-  const int plusY = (int)lroundf(CX - R_slider * 0.3420f);   // ~163
-  const int minusX = (int)lroundf(CX + R_slider * 0.9397f);  // ~427
-  const int minusY = (int)lroundf(CX + R_slider * 0.3420f);  // ~303
+  // 加减号显示时机：缩放操作中、或在 10s 倒计时内
+  bool showBtns = mapZoomActive || (now < mapZoomBtnUntil);
+  static bool prevShowBtns = false;
+  if (!showBtns && prevShowBtns) {
+    navDirty = true; // 10s 到期隐藏瞬间触发重绘刷新
+  }
+  prevShowBtns = showBtns;
 
-  // 1. 加号 (+) 半透明底座与图标
-  drawTranslucentCircle(plusX, plusY, 13, 0x0000, bgAlpha);
-  gfx->drawCircle(plusX, plusY, 13, borderCol);
-  // 加号十字 (粗 2px)
-  gfx->fillRect(plusX - 4, plusY - 1, 9, 2, iconColor);
-  gfx->fillRect(plusX - 1, plusY - 4, 2, 9, iconColor);
+  uint8_t bgAlpha = mapZoomActive ? 190 : 110;
+  uint16_t iconColor = C_WHITE;
+  uint16_t borderCol = mapZoomActive ? 0x07E0 : C_WHITE; // 操作时边框变绿，静止时白色边框
 
-  // 2. 减号 (-) 半透明底座与图标
-  drawTranslucentCircle(minusX, minusY, 13, 0x0000, bgAlpha);
-  gfx->drawCircle(minusX, minusY, 13, borderCol);
-  // 减号横线 (粗 2px)
-  gfx->fillRect(minusX - 4, minusY - 1, 9, 2, iconColor);
+  // 2. 贴合圆屏边缘几何：半径增至 210（紧贴外圈进度环内缘，与 233 屏幕边缘严格同心）
+  const float R_slider = 210.0f;
 
-  // 3. 弧形滑轨槽 (76° 到 104° 弧段)
-  uint16_t trackCol = isActive ? 0x5AEB : 0x2124;
-  for (int deg = 76; deg <= 104; deg += 3) {
+  // 3. 弧形滑轨槽圆点列 (66° 到 114°，跨越 48° 饱满圆弧，向外拱起 18.2px，完美契合屏幕边缘曲率)
+  uint16_t trackDotCol = mapZoomActive ? 0x6BF2 : 0x3A49; // 活跃时亮青色，平时细腻深灰
+  for (int deg = 66; deg <= 114; deg += 4) {
     float rad = deg * (float)M_PI / 180.0f;
     int tx = (int)lroundf(CX + R_slider * sinf(rad));
     int ty = (int)lroundf(CX - R_slider * cosf(rad));
-    gfx->drawPixel(tx, ty, trackCol);
-    gfx->drawPixel(tx + 1, ty, trackCol);
+    gfx->fillCircle(tx, ty, 1, trackDotCol);
   }
 
-  // 4. 当前缩放倍率滑块指示点 (Knob)
-  // userMapScale (0.10f ~ 1.00f) 线性映射到 104° (缩小) ~ 76° (放大)
-  float p = constrain((userMapScale - 0.10f) / (1.00f - 0.10f), 0.0f, 1.0f);
-  float knobDeg = 104.0f - p * 28.0f; // 76° ~ 104°
+  // 4. 当前缩放倍率滑块指示点 (Knob，用户要求保留常驻显示)
+  // userMapScale (0.20f ~ 1.00f) 线性映射到 114° (缩小) ~ 66° (放大)
+  float p = constrain((userMapScale - 0.20f) / (1.00f - 0.20f), 0.0f, 1.0f);
+  float knobDeg = 114.0f - p * 48.0f; // 66° ~ 114°
   float knobRad = knobDeg * (float)M_PI / 180.0f;
   int kx = (int)lroundf(CX + R_slider * sinf(knobRad));
   int ky = (int)lroundf(CX - R_slider * cosf(knobRad));
 
-  if (isActive) {
-    gfx->fillCircle(kx, ky, 4, 0x07E0); // 活跃时亮绿实心滑块
-    gfx->drawCircle(kx, ky, 4, C_WHITE);
+  if (mapZoomActive) {
+    gfx->fillCircle(kx, ky, 5, 0x07E0); // 只有正在缩放操作时才显示加粗亮绿滑块
+    gfx->drawCircle(kx, ky, 5, C_WHITE);
   } else {
-    gfx->fillCircle(kx, ky, 3, 0x8410); // 平时低调半透明小滑块
+    gfx->fillCircle(kx, ky, 3, C_WHITE); // 平时（包括刚进入地图展示加减号时）均为纯白高亮圆点
+    gfx->drawCircle(kx, ky, 3, 0x2124);
+  }
+
+  // 5. 加减号方形按钮：在操作中或 10s 倒计时内显示，超时自动隐藏
+  if (showBtns) {
+    const float R_btn = 208.0f;
+    // 加号在上方 62°，减号在下方 118° (sin(62°)=0.8829, cos(62°)=0.4695)
+    const int plusX = (int)lroundf(CX + R_btn * 0.8829f);   // ~417
+    const int plusY = (int)lroundf(CX - R_btn * 0.4695f);   // ~135
+    const int minusX = (int)lroundf(CX + R_btn * 0.8829f);  // ~417
+    const int minusY = (int)lroundf(CX + R_btn * 0.4695f);  // ~331
+
+    const int boxSize = 24;
+    const int halfBox = 12;
+    const int boxR = 4; // 微圆角 (4px) 方形底座
+
+    // 加号 (+) 方形半透明底座与白色/绿色边框图标
+    drawTranslucentRoundRect(plusX - halfBox, plusY - halfBox, boxSize, boxSize, boxR, 0x0000, bgAlpha);
+    gfx->drawRoundRect(plusX - halfBox, plusY - halfBox, boxSize, boxSize, boxR, borderCol);
+    // 加号十字 (粗 2px)
+    gfx->fillRect(plusX - 4, plusY - 1, 9, 2, iconColor);
+    gfx->fillRect(plusX - 1, plusY - 4, 2, 9, iconColor);
+
+    // 减号 (-) 方形半透明底座与白色/绿色边框图标
+    drawTranslucentRoundRect(minusX - halfBox, minusY - halfBox, boxSize, boxSize, boxR, 0x0000, bgAlpha);
+    gfx->drawRoundRect(minusX - halfBox, minusY - halfBox, boxSize, boxSize, boxR, borderCol);
+    // 减号横线 (粗 2px)
+    gfx->fillRect(minusX - 4, minusY - 1, 9, 2, iconColor);
   }
 }
 
@@ -1736,7 +1771,11 @@ void drawMapZoomHint(uint32_t now) {
   gfx->drawRoundRect(cardX, cardY, cardW, cardH, 12, borderCol);
   
   char buf[20];
-  snprintf(buf, sizeof(buf), "ZOOM %.1fx", userMapScale);
+  if (!userZoomOverridden) {
+    snprintf(buf, sizeof(buf), "AUTO %.1fx", userMapScale);
+  } else {
+    snprintf(buf, sizeof(buf), "ZOOM %.1fx", userMapScale);
+  }
   drawAaString((float)CX, (float)(cardY + cardH / 2), buf, 1.8f, 1.05f, 11.5f, C_WHITE, true);
 }
 
@@ -2481,10 +2520,29 @@ static inline float bandCov(float r, float rIn, float rOut) {
 #define RQ_MIN  (4 * 209 * 209)              // 半径 209 以内不用管
 #define RQ_MAX  (4 * 235 * 235)              // 半径 235 以外整段清零
 #define RQ_SH   4
+#define RING_R64_BASE (209 << 6)
+#define RING_COV_LEN  ((236 - 209) << 6)     // 1728 字节：覆盖 r64 ∈ [209*64, 236*64)
 uint16_t *rq2r = nullptr;                    // (q - RQ_MIN) >> 4 → 半径 × 64
+uint8_t *ringTurnCov = nullptr;              // 内环(TURN_RING_R) 覆盖率预计算查表 (0~64)
+uint8_t *ringTripCov = nullptr;              // 外环(TRIP_RING_R) 覆盖率预计算查表 (0~64)
+int ringTurnCovH = -1;                       // ringTurnCov 当前对应的半宽 h
 int16_t ringInH[LCD_HEIGHT], ringOutH[LCD_HEIGHT];   // 每行：内圈半宽（以内跳过）、外圈半宽（以外清零）
 float ringUx = 0, ringUy = -1;               // 进度条末端方向
 float tripUx = 0, tripUy = -1;               // v7.4 行程环“走过 / 没走”交界方向
+
+// 一段圆环的覆盖率（0~64）：r64 = 半径×64；带宽 [a, b]
+static inline int bandCov64(int r64, int a, int b) {
+  int c = min(r64 - (a * 64 - 32), (b * 64 + 32) - r64);
+  return c <= 0 ? 0 : (c >= 64 ? 64 : c);
+}
+
+static void ringUpdateTurnCov(int h) {
+  if (!ringTurnCov || ringTurnCovH == h) return;
+  ringTurnCovH = h;
+  for (int i = 0; i < RING_COV_LEN; i++) {
+    ringTurnCov[i] = (uint8_t)bandCov64(RING_R64_BASE + i, TURN_RING_R - h, TURN_RING_R + h);
+  }
+}
 
 bool ringTablesInit() {
   if (rq2r) return true;
@@ -2492,6 +2550,13 @@ bool ringTablesInit() {
   rq2r = (uint16_t *)heap_caps_malloc(n * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (!rq2r) return false;
   for (int k = 0; k < n; k++) rq2r[k] = (uint16_t)(sqrtf((float)(RQ_MIN + (k << RQ_SH) + 8)) * 32.0f);   // √q/2×64
+  ringTurnCov = (uint8_t *)heap_caps_malloc(RING_COV_LEN, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  ringTripCov = (uint8_t *)heap_caps_malloc(RING_COV_LEN, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (ringTripCov) {
+    for (int i = 0; i < RING_COV_LEN; i++) {
+      ringTripCov[i] = (uint8_t)bandCov64(RING_R64_BASE + i, TRIP_RING_R - TRIP_H, TRIP_RING_R + TRIP_H);
+    }
+  }
   for (int y = 0; y < LCD_HEIGHT; y++) {
     int iy = 2 * y + 1 - LCD_HEIGHT;
     long iy2 = (long)iy * iy;
@@ -2507,54 +2572,71 @@ bool ringTablesInit() {
   return true;
 }
 
-// 一段圆环的覆盖率（0~64）：r64 = 半径×64；带宽 [a, b]
-static inline int bandCov64(int r64, int a, int b) {
-  int c = min(r64 - (a * 64 - 32), (b * 64 + 32) - r64);
-  return c <= 0 ? 0 : (c >= 64 ? 64 : c);
-}
-
 static inline void ringPixel(uint16_t *px, int ix, long iy2, int iy) {
   long q = (long)ix * ix + iy2;
   int k = (int)((q - RQ_MIN) >> RQ_SH);
   int r64 = rq2r[k < 0 ? 0 : k];
+
+  int ci = r64 - RING_R64_BASE;
+  if (ci < 0) ci = 0;
+  else if (ci >= RING_COV_LEN) ci = RING_COV_LEN - 1;
+
+  int aTurn = RP.track ? (ringTurnCov ? ringTurnCov[ci] : bandCov64(r64, TURN_RING_R - (int)RP.ph, TURN_RING_R + (int)RP.ph)) : 0;
+  int aTrip = (RP.trip >= 0) ? (ringTripCov ? ringTripCov[ci] : bandCov64(r64, TRIP_RING_R - TRIP_H, TRIP_RING_R + TRIP_H)) : 0;
+  bool hasAlert = (RP.alertAlpha > 0 && r64 >= (210 << 6));
+
+  // 快速跳过：非预警且不在任何环上 → 0 次 PSRAM 读写
+  if (!hasAlert && !aTurn && !aTrip) return;
+
+  // 纯实心外环：完全覆盖底图，无需读取 PSRAM，直接写入
+  if (aTrip >= 64) {
+    bool right = ix >= 0;
+    bool before = (ix * tripUy - iy * tripUx) >= 0;
+    bool done = RP.trip >= 0.9999f ? true : RP.trip <= 0.0001f ? false : (RP.trip <= 0.5f ? (right && before) : (right || before));
+    *px = done ? TRIP_DONE_C : TRIP_LEFT_C;
+    return;
+  }
+
+  // 纯实心内环且无外环叠加：完全覆盖底图，无需读取 PSRAM，直接写入
+  if (aTurn >= 64 && !aTrip) {
+    bool right = ix >= 0;
+    bool before = (ix * ringUy - iy * ringUx) >= 0;
+    bool done = RP.prog >= 0.9999f ? true : RP.prog <= 0.0001f ? false : (RP.prog <= 0.5f ? (right && before) : (right || before));
+    *px = done ? C_TRACK : RP.pcol;
+    return;
+  }
+
   uint16_t c = *px;
-  int a;
 
   // 1. 屏幕边缘渐变闪烁视觉提示（超速 / 电子眼，不固化为进度环）
-  if (RP.alertAlpha > 0 && r64 >= (210 << 6)) {
+  if (hasAlert) {
     int grad = ((r64 - (210 << 6)) * 255) / (23 << 6);
     if (grad > 255) grad = 255;
     int aGlow = (grad * RP.alertAlpha) >> 8;
     if (aGlow > 0) c = blendF(c, RP.alertCol, aGlow);
   }
 
-  // 2. 内侧环：路口倒计时环（按需出现，位于总进度环内侧 TURN_RING_R；与总路程进度一致：已走为灰，未走为亮色，越接近路口亮色越少）
-  if (RP.track) {
-    int h = (int)RP.ph;
-    a = bandCov64(r64, TURN_RING_R - h, TURN_RING_R + h);
-    if (a) {
-      bool right = ix >= 0;
-      bool before = (ix * ringUy - iy * ringUx) >= 0;
-      bool done = RP.prog >= 0.9999f ? true : RP.prog <= 0.0001f ? false : (RP.prog <= 0.5f ? (right && before) : (right || before));
-      uint16_t rc = done ? C_TRACK : RP.pcol;
-      c = a >= 64 ? rc : blendF(c, rc, a * 4);
-    }
+  // 2. 内侧环：路口倒计时环
+  if (aTurn) {
+    bool right = ix >= 0;
+    bool before = (ix * ringUy - iy * ringUx) >= 0;
+    bool done = RP.prog >= 0.9999f ? true : RP.prog <= 0.0001f ? false : (RP.prog <= 0.5f ? (right && before) : (right || before));
+    uint16_t rc = done ? C_TRACK : RP.pcol;
+    c = aTurn >= 64 ? rc : blendF(c, rc, aTurn * 4);
   }
 
-  // 3. 最外环：全程总进度环（永远显示，紧贴屏幕边缘 TRIP_RING_R）
-  if (RP.trip >= 0) {
-    a = bandCov64(r64, TRIP_RING_R - TRIP_H, TRIP_RING_R + TRIP_H);
-    if (a) {
-      bool right = ix >= 0;
-      bool before = (ix * tripUy - iy * tripUx) >= 0;
-      bool done = RP.trip >= 0.9999f ? true : RP.trip <= 0.0001f ? false : (RP.trip <= 0.5f ? (right && before) : (right || before));
-      uint16_t tc = done ? TRIP_DONE_C : TRIP_LEFT_C;
-      c = a >= 64 ? tc : blendF(c, tc, a * 4);
-    }
+  // 3. 最外环：全程总进度环
+  if (aTrip) {
+    bool right = ix >= 0;
+    bool before = (ix * tripUy - iy * tripUx) >= 0;
+    bool done = RP.trip >= 0.9999f ? true : RP.trip <= 0.0001f ? false : (RP.trip <= 0.5f ? (right && before) : (right || before));
+    uint16_t tc = done ? TRIP_DONE_C : TRIP_LEFT_C;
+    c = blendF(c, tc, aTrip * 4);
   }
   *px = c;
 }
 
+__attribute__((optimize("O3")))
 void ringRows(int y0, int y1, int step) {
   uint16_t *fb = RP.fb;
   const int W = LCD_WIDTH, HW = LCD_WIDTH / 2;
@@ -2588,6 +2670,7 @@ void drawRingLayer(bool track, float prog, int thick, uint16_t pcol, uint16_t al
     }
     return;
   }
+  if (track) ringUpdateTurnCov((int)RP.ph);
   ringUx = sinf(RP.prog * 2 * PI); ringUy = -cosf(RP.prog * 2 * PI);
   parallelRows(ringRows, 0, LCD_HEIGHT);
   if (RP.track && RP.prog > 0.002f && RP.prog < 0.998f) { // 剩余弧段 [prog, 1] 两头的圆头
@@ -2603,6 +2686,7 @@ uint8_t *vigKeep = nullptr;                // 下标 = 半径² - r0²，值 = �
 int vigK0 = 0, vigK1 = 0;
 struct { uint16_t *fb; float r0, r1; } VP;
 
+__attribute__((optimize("O3")))
 void vignetteRows(int y0, int y1, int step) {
   uint16_t *fb = VP.fb;
   float r0 = VP.r0, r1 = VP.r1, ri2 = r0 * r0, ro2 = r1 * r1;
@@ -2870,13 +2954,27 @@ void drawMapFrame() {
   bool rasOK = !dragon && rasterValid && rasterFrame == posFrame;
   bool useRaster = rasOK && (!vecOK || rasterAt >= vectorAt);
 
-  // 基础缩放比例与车速放缓动态叠加：
-  // 用户基础缩放（支持 0.1x ~ 1.0x 实用范围）
-  float baseS = userMapScale;
-  // 车速放缓叠加系数：低倍率下保底 0.72f 避免视野过远超出单块 2.2km 前瞻范围，高速高倍率下最多拉远至 0.58f
-  float speedFloor = (userMapScale <= 0.50f) ? 0.72f : 0.58f;
-  float speedFactor = constrain(1.0f - (posKmh > 0 ? posKmh : 0) * 0.0028f, speedFloor, 1.0f);
-  float targetS = constrain(baseS * speedFactor, 0.08f, 1.00f);
+  // 车速分段自适应缩放（40km/h以下: 1.0x, 40-60: 0.8x, 60-80: 0.6x, 80-100: 0.4x, 100以上: 0.2x）
+  int newZone = calculateSpeedZone(posKmh, currentSpeedZone);
+  if (currentSpeedZone < 0) {
+    currentSpeedZone = newZone;
+    if (!userZoomOverridden) {
+      userMapScale = getSpeedZoneScale(newZone);
+    }
+  } else if (newZone != currentSpeedZone) {
+    // 速度跨越设定区间！用户手动设置的缩放临时生效结束，恢复并继续自动缩放
+    currentSpeedZone = newZone;
+    userZoomOverridden = false;
+    userMapScale = getSpeedZoneScale(newZone);
+    mapZoomHintUntil = t + 1500; // 短暂弹出 HUD 提示新速度区间的缩放倍率
+    if (bleConnected && pendingEvt.length() == 0) {
+      pendingEvt = "T,ZOOM," + String((int)lroundf(userMapScale * 100.0f));
+    }
+    navDirty = true;
+  }
+
+  // 目标缩放比例与平滑过渡：
+  float targetS = constrain(userMapScale, 0.20f, 1.00f);
   if (mapZoomActive) {
     // 双击按住滑动缩放时：45ms 极速响应紧贴手指，同时吸收离散触摸报点抖动
     viewScale += (targetS - viewScale) * (1.0f - expf(-vdt / 0.045f));

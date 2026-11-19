@@ -36,7 +36,8 @@ static inline bool rasterHeaderCheck(const uint8_t *p, uint32_t len, RasterHeade
   h.buildings=(flags&RASTER_FLAG_BUILDINGS)!=0;
   h.deflate=(flags&RASTER_FLAG_DEFLATE)!=0;
   h.delta=(flags&RASTER_FLAG_DELTA)!=0;
-  h.mm=flags&RASTER_MM_MASK;
+  uint16_t rawMm=flags&RASTER_MM_MASK;
+  h.mm=(rawMm>0 && rawMm<1000) ? (uint16_t)(rawMm*10) : rawMm;
   h.refX0=h.x0; h.refY0=h.y0;
   if (h.palette && (h.buildings || h.delta)) return false;
   uint32_t n=(uint32_t)h.width*h.height;

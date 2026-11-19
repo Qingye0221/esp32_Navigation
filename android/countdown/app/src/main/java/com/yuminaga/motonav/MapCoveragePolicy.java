@@ -9,10 +9,10 @@ public final class MapCoveragePolicy {
     }
 
     public static double viewRadius(int kmh, double userZoom) {
-        double z = Math.max(0.10, Math.min(1.00, userZoom));
+        double z = Math.max(0.20, Math.min(1.00, userZoom));
         double speedFactor = Math.max(0.50, Math.min(1.00, 1.0 - Math.max(0, kmh) * 0.0042));
-        // 结合圆屏实际缩放比例自适应视野，最低支持 0.08 宏观视野覆盖
-        double scale = Math.min(0.50, Math.max(0.08, z * speedFactor));
+        // 结合圆屏实际缩放比例自适应视野，最低支持 0.20 宏观视野覆盖
+        double scale = Math.min(0.50, Math.max(0.20, z * speedFactor));
         return 241.0 / scale;
     }
 

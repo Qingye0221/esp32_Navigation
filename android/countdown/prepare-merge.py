@@ -50,7 +50,7 @@ app.set(A+'icon',mapp.get(A+'icon'))
 app.set(A+'extractNativeLibs','true')
 for e in app:
     if e.tag in ['activity','activity-alias','provider','service','receiver']:expand(e,host)
-    # Keep the car console as an internal activity, with one MotoNav launcher icon.
+    # Keep the car console as an internal activity, with one esp32Nav launcher icon.
     for f in list(e.findall('intent-filter')):
         if any(x.get(A+'name')=='android.intent.category.LAUNCHER' for x in f.findall('category')):e.remove(f)
     if e.tag=='activity' and e.get(A+'name')==host+'.MainMapActivity':
@@ -60,12 +60,12 @@ for e in list(mapp):
     if e.tag not in ['activity','activity-alias','provider','service','receiver']:continue
     item=copy.deepcopy(e);expand(item,original)
     item.set(A+'process',':motonav')
-    # Explicitly preserve MotoNav's HWUI requirement in the merged manifest.
+    # Explicitly preserve esp32Nav's HWUI requirement in the merged manifest.
     # TextureMapView cannot draw in the software-rendered windows seen on device.
     if item.tag=='activity':
         item.set(A+'hardwareAccelerated','true')
-        # Car MainMapActivity is singleTask. It must not clear MotoNav navigation
-        # off the same task stack (nor be cleared when MotoNav returns).
+        # Car MainMapActivity is singleTask. It must not clear esp32Nav navigation
+        # off the same task stack (nor be cleared when esp32Nav returns).
         item.set(A+'taskAffinity',host+'.motonav')
     if item.tag in ['activity','activity-alias'] and A+'theme' not in item.attrib:item.set(A+'theme',mapp.get(A+'theme'))
     authority=item.get(A+'authorities')
@@ -76,7 +76,7 @@ for e in own:
     if e.tag.startswith('uses-permission') or e.tag in ['uses-feature','permission']:
         name=e.get(A+'name')
         # AndroidX derives this permission from the installed host package.
-        # Never redeclare the independent formal MotoNav application's permission.
+        # Never redeclare the independent formal esp32Nav application's permission.
         if name==original+'.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION':
             name=host+'.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
             e.set(A+'name',name)
@@ -92,7 +92,7 @@ if sdk is None:sdk=E.SubElement(car,'uses-sdk')
 sdk.set(A+'minSdkVersion','28')
 if A+'targetSdkVersion' not in sdk.attrib:sdk.set(A+'targetSdkVersion','32')
 # The car engine parses this field as its own numeric protocol version.
-# The MotoNav UI separately displays APP_VERSION=8.3.25-fusion.1.
+# The esp32Nav UI separately displays APP_VERSION=8.3.25-fusion.1.
 car.set(A+'versionCode','26000001');car.set(A+'versionName','9.5.0.600013')
 for e in car.iter():
     for k in list(e.attrib):

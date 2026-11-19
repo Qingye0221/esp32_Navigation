@@ -12,6 +12,8 @@
 #define LCD_SDIO3 45
 #define LCD_SCLK 40
 #define LCD_CS 39
+// CO5300 TE（Tearing Effect，垂直同步）输出，M5 官方 PinMap：OLED_TE = GPIO38；用于推屏防撕裂
+#define LCD_TE 38
 // OLED 复位不在 ESP32 GPIO 上，挂在 M5IOE1 扩展芯片 PYG5：
 // 这里给 -1（Arduino_GFX 跳过自己的复位），复位由 BoardStopWatchInit.h 负责
 #define LCD_RESET -1

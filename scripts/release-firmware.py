@@ -98,11 +98,11 @@ def prepare():
     require(len(image_data['app'])<=0x300000 and image_data['full'][0x10000:]==image_data['app'],'Invalid partition size/application offset')
     flat=dict(firmware=version,platform='universal',board='Waveshare ESP32-S3-Touch-AMOLED-1.75',
         esp32Core='3.3.10',flashSize='16MB',partition='app3M_fat9M_16MB',verifiedApplicationOffset='0x10000',deviceTested=False,files=files)
-    firmware_zip=output/f'MotoNav-universal-firmware-{version}.zip'
+    firmware_zip=output/f'esp32Nav-universal-firmware-{version}.zip'
     with zipfile.ZipFile(firmware_zip,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for kind,item in zip(('app','full'),files): z.writestr('firmware/dist/175/panel0/'+item['file'],image_data[kind])
-        z.writestr(f'firmware/dist/175/panel0/MotoNav_universal_1.75_v{version}_panel0_manifest.json',json.dumps(flat,indent=2)+'\n')
-    source_zip=output/f'MotoNav-Firmware-Source-1.75-v{version}-universal.zip'
+        z.writestr(f'firmware/dist/175/panel0/esp32Nav_universal_1.75_v{version}_panel0_manifest.json',json.dumps(flat,indent=2)+'\n')
+    source_zip=output/f'esp32Nav-Firmware-Source-1.75-v{version}-universal.zip'
     source_files=[]
     for base in ('firmware/boards/175','firmware/libraries','firmware/tests','firmware/windows-flasher','licenses'):
         source_files.extend(p for p in (ROOT/base).rglob('*') if p.is_file() and not any(s in p.relative_to(ROOT).parts for s in ('build','.build','__pycache__')) and p.suffix!='.pyc')
@@ -111,7 +111,7 @@ def prepare():
     with zipfile.ZipFile(source_zip,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for path in sorted(set(source_files)):
             rel=path.relative_to(ROOT).as_posix()
-            info=zipfile.ZipInfo('MotoNav/'+rel,date_time=(1980,1,1,0,0,0))
+            info=zipfile.ZipInfo('esp32Nav/'+rel,date_time=(1980,1,1,0,0,0))
             info.compress_type=zipfile.ZIP_DEFLATED
             info.external_attr=(0o100755 if path.suffix=='.command' else 0o100644)<<16
             z.writestr(info,path.read_bytes())
@@ -137,7 +137,7 @@ def main():
     if existing.returncode==0:
         require(json.loads(existing.stdout)['targetCommitish']==commit,'Existing release points to a different commit; refusing to replace it')
     else:
-        run('gh','release','create',tag,'--target',commit,'--title',f'MotoNav 圆屏 {version} · 安卓/iOS通用','--notes-file',notes,'--draft')
+        run('gh','release','create',tag,'--target',commit,'--title',f'esp32Nav 圆屏 {version} · 安卓/iOS通用','--notes-file',notes,'--draft')
     run('gh','release','upload',tag,*assets,'--clobber')
     run('gh','release','edit',tag,'--notes-file',notes,'--draft=false','--latest=false')
     print('Published '+tag,flush=True)

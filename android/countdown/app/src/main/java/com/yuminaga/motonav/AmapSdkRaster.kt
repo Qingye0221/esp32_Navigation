@@ -89,7 +89,7 @@ object AmapSdkRaster {
             // Each style starts from the captured SDK pixels, never another style's output.
             if(style==MapStylePolicy.ORIGINAL || style==MapStylePolicy.MINIMAL) {
                 val mask=if(style==MapStylePolicy.MINIMAL)MinimalRoadRaster.indices(raw,n)else null
-                val bytes=if(style==MapStylePolicy.ORIGINAL)OriginalRaster.encode(f,x0,y0,n,raw,shouldCancel)
+                val bytes=if(style==MapStylePolicy.ORIGINAL)OriginalRaster.encode(f,x0,y0,n,raw,shouldCancel,mmPerPx)
                     else MapGeo.encodeRaster(f.id,x0,y0,n,n,mmPerPx,mask!!)
                 if(!RasterPacket.valid(bytes,f.id,x0,y0))throw IOException("独立风格地图包不完整")
                 onBaseReady?.invoke(bytes)

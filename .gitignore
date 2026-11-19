@@ -22,6 +22,7 @@ output/
 .env
 .env.*
 private*
+导航性能优化总结-给作者.md
 
 # ================= iOS generated dependencies and local signing =================
 **/Pods/

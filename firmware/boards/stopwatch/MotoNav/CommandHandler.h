@@ -558,7 +558,9 @@ void handleText(const String &m) {
       navDist = m.substring(comma + 1).toInt();
       navAngle = NAN;
     }
+    bool wasNav = inNav;
     inNav = true;
+    if (!wasNav) mapZoomBtnUntil = millis() + 10000;
     if (navDir != "A") idlePowerOffReset(&idlePowerOffTimer, millis());
     updateRingTarget();
     navDirty = true;

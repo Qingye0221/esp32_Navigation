@@ -94,6 +94,7 @@ bool fastFlushInit() {
 // v7.7 RGB565 拆成 0x0GGRRBB 形式（绿、红、蓝之间留空），一次乘法就能三个颜色一起按权重混合
 static inline uint32_t rgbSpread(uint16_t c) { return ((uint32_t)c | ((uint32_t)c << 16)) & 0x07E0F81Fu; }
 
+__attribute__((optimize("O3")))
 void fastPush(const uint16_t *fb) {
   panel->startWrite();
   panel->writeAddrWindow(0, 0, LCD_WIDTH, LCD_HEIGHT);   // 设置写入区域（整屏）+ 写显存命令
@@ -142,7 +143,6 @@ void fastPush(const uint16_t *fb) {
         fx += rotCos; fy -= rotSin;
         if (++px == W) { px = 0; py++; rowInit = false; }
       }
-      if ((bi & 1) == 0) taskYIELD();
     } else if (screenRot == 0) {
       const uint32_t *src = (const uint32_t *)(fb + sent);
       uint32_t *dst = (uint32_t *)fastBuf[bi];
@@ -293,6 +293,7 @@ void initDoubleBuffer() {
   flushReq = xSemaphoreCreateBinary();
   flushDone = xSemaphoreCreateBinary();
   xSemaphoreGive(flushDone);
-  xTaskCreatePinnedToCore(flushTask, "flush", 4096, nullptr, 2, nullptr, 0);
+  // 推屏任务优先级(4)必须高于 Core 0 辅助渲染 helperLoop(2)，避免推屏中途被抢占造成撕裂
+  xTaskCreatePinnedToCore(flushTask, "flush", 4096, nullptr, 4, nullptr, 0);
 }
 

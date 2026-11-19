@@ -41,7 +41,7 @@ $taskVersionSource=Join-Path $taskSketch 'src/core/FirmwareConfig.h'
 if(!(Test-Path -LiteralPath $taskVersionSource)){$taskVersionSource=Join-Path $taskSketch 'esp32Nav.ino'}
 $taskVersion=[regex]::Match([IO.File]::ReadAllText($taskVersionSource),'^#define FW_VERSION "v([^\"]+)"',[Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value
 if(!$taskVersion){throw 'Cannot read firmware version'}
-$taskName="MotoNav_universal_${taskLabel}_v${taskVersion}_panel$PanelVariant"
+$taskName="esp32Nav_universal_${taskLabel}_v${taskVersion}_panel$PanelVariant"
 $taskApp=[IO.File]::ReadAllBytes((Join-Path $taskOutput 'esp32Nav.ino.bin'))
 $taskMerged=[IO.File]::ReadAllBytes((Join-Path $taskOutput 'esp32Nav.ino.merged.bin'))
 $taskLength=0x10000+$taskApp.Length

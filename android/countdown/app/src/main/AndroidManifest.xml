@@ -107,7 +107,7 @@
         <service
             android:name=".AmapNotifyListener"
             android:exported="true"
-            android:label="MotoNav 音乐与导航通知"
+            android:label="esp32Nav 音乐与导航通知"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
@@ -116,7 +116,7 @@
         <service
             android:name=".AmapScreenReader"
             android:exported="true"
-            android:label="MotoNav 读取高德界面"
+            android:label="esp32Nav 读取高德界面"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

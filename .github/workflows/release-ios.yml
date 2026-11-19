@@ -66,10 +66,10 @@ jobs:
         shell: bash
         run: |
           VERSION=$(cat RELEASE_VERSION)
-          test -f "output/ios/MotoNav-${VERSION}-unsigned.ipa"
-          git archive --format=zip --prefix=MotoNav/ HEAD > "output/ios/MotoNav-${VERSION}-source.zip"
+          test -f "output/ios/esp32Nav-${VERSION}-unsigned.ipa"
+          git archive --format=zip --prefix=esp32Nav/ HEAD > "output/ios/esp32Nav-${VERSION}-source.zip"
           if [[ -d firmware/dist/175/panel0 ]]; then
-            zip -qr "output/ios/MotoNav-universal-firmware-7.12.0.zip" firmware/dist/175/panel0
+            zip -qr "output/ios/esp32Nav-universal-firmware-7.12.0.zip" firmware/dist/175/panel0
           fi
           cp docs/INSTALL-IOS.md output/ios/INSTALL-IOS.md
           cp firmware/README.md output/ios/FIRMWARE.md
@@ -79,7 +79,7 @@ jobs:
       - name: Keep build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: motonav-public-release
+          name: esp32nav-public-release
           path: output/ios/
       - name: Publish GitHub Release
         env:
@@ -88,6 +88,6 @@ jobs:
         run: |
           VERSION=$(cat RELEASE_VERSION)
           TAG="ios-v${VERSION}"
-          gh release create "$TAG" --target "$GITHUB_SHA" --title "MotoNav iOS ${VERSION} · 通用圆屏 7.12.0" --notes-file "docs/RELEASE-IOS-${VERSION}.md" --draft
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "esp32Nav iOS ${VERSION} · 通用圆屏 7.12.0" --notes-file "docs/RELEASE-IOS-${VERSION}.md" --draft
           gh release upload "$TAG" output/ios/*.ipa output/ios/*.zip output/ios/*.md output/ios/SHA256SUMS.txt
           gh release edit "$TAG" --draft=false

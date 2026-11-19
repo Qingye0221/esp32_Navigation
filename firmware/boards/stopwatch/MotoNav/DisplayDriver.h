@@ -94,7 +94,45 @@ bool fastFlushInit() {
 // v7.7 RGB565 拆成 0x0GGRRBB 形式（绿、红、蓝之间留空），一次乘法就能三个颜色一起按权重混合
 static inline uint32_t rgbSpread(uint16_t c) { return ((uint32_t)c | ((uint32_t)c << 16)) & 0x07E0F81Fu; }
 
+// ---- 防撕裂：CO5300 的 TE（Tearing Effect）信号同步 ----
+// 屏幕自己按 ~60Hz 从显存扫描出画面；如果推屏的起点和扫描不同步，扫描线就会“追上/越过”写入位置，
+// 一帧里上半截是新画面、下半截是旧画面，地图移动和旋转时就是肉眼可见的横向撕裂。
+// TE 脚在每帧扫描回到顶部（垂直消隐）时给一个上升沿；等到这个沿再开始写显存，
+// 写入速度（80MHz 四线约 11ms）快于扫描（16.7ms），写指针始终跑在扫描指针前面，就不会撕裂。
+#ifdef LCD_TE
+SemaphoreHandle_t teSem = nullptr;
+volatile bool teSync = false;                 // 是否启用 TE 同步（启动后检测不到信号会自动关闭）
+volatile uint32_t teHits = 0, teMiss = 0;
+static void IRAM_ATTR teIsr() {
+  BaseType_t w = pdFALSE;
+  if (teSem) xSemaphoreGiveFromISR(teSem, &w);
+  teHits = teHits + 1;
+  if (w) portYIELD_FROM_ISR();
+}
+void teInit() {
+  teSem = xSemaphoreCreateBinary();
+  pinMode(LCD_TE, INPUT);
+  bus->beginWrite();
+  bus->writeC8D8(0x35, 0x00);                 // Tearing Effect Line ON（仅垂直消隐）
+  bus->endWrite();
+  attachInterrupt(digitalPinToInterrupt(LCD_TE), teIsr, RISING);
+  teSync = true;
+}
+// 等下一个垂直消隐上升沿；超时说明这个脚上没有信号，累计后自动退回无同步模式
+static inline void teWait() {
+  if (!teSync) return;
+  xSemaphoreTake(teSem, 0);                   // 丢掉旧的沿，只等“下一个”
+  if (xSemaphoreTake(teSem, pdMS_TO_TICKS(25)) == pdTRUE) { teMiss = 0; return; }
+  if (++teMiss >= 20 && teHits == 0) { teSync = false; detachInterrupt(digitalPinToInterrupt(LCD_TE)); }
+}
+#else
+static inline void teWait() {}
+void teInit() {}
+#endif
+
+__attribute__((optimize("O3")))
 void fastPush(const uint16_t *fb) {
+  teWait();                                   // 对齐到屏幕扫描起点再开始写
   panel->startWrite();
   panel->writeAddrWindow(0, 0, LCD_WIDTH, LCD_HEIGHT);   // 设置写入区域（整屏）+ 写显存命令
   panel->endWrite();
@@ -142,7 +180,6 @@ void fastPush(const uint16_t *fb) {
         fx += rotCos; fy -= rotSin;
         if (++px == W) { px = 0; py++; rowInit = false; }
       }
-      if ((bi & 1) == 0) taskYIELD();
     } else if (screenRot == 0) {
       const uint32_t *src = (const uint32_t *)(fb + sent);
       uint32_t *dst = (uint32_t *)fastBuf[bi];
@@ -290,9 +327,12 @@ void initDoubleBuffer() {
   if (!fbBuf[1]) return;
   memcpy(fbBuf[1], fbBuf[0], LCD_WIDTH * LCD_HEIGHT * 2);
   if (fastFlushOn) fastFlushInit();                // v2.6 快速刷屏
+  teInit();                                        // 防撕裂：TE 同步（需 LCD_TE 引脚）
   flushReq = xSemaphoreCreateBinary();
   flushDone = xSemaphoreCreateBinary();
   xSemaphoreGive(flushDone);
-  xTaskCreatePinnedToCore(flushTask, "flush", 4096, nullptr, 2, nullptr, 0);
+  // 推屏任务优先级(4)必须高于 Core 0 辅助渲染 helperLoop(2)：
+  // 收到 TE 上升沿后一气呵成推完整帧(~11-14ms < 16.67ms 刷新周期)，彻底杜绝推屏中途被抢占造成的横向撕裂
+  xTaskCreatePinnedToCore(flushTask, "flush", 4096, nullptr, 4, nullptr, 0);
 }
 

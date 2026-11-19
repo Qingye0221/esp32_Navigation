@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-MotoNav Stopwatch: ESP32-S3 Factory Firmware Merger
+esp32Nav Stopwatch: ESP32-S3 Factory Firmware Merger
 ===================================================
 自动将 bootloader、partitions、boot_app0 与 主程序固件合并为一个完整的 .bin 文件。
 可直接从 0x0000 烧录，方便在 GitHub Releases 发布、或使用 Web Flasher / M5Burner / esptool 一键刷机。
@@ -140,7 +140,7 @@ def format_size(bytes_size):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MotoNav ESP32-S3 Factory Firmware Merger for M5Burner")
+    parser = argparse.ArgumentParser(description="esp32Nav ESP32-S3 Factory Firmware Merger for M5Burner")
     parser.add_argument("--env", default=DEFAULT_ENV, help=f"PlatformIO build environment (default: {DEFAULT_ENV})")
     parser.add_argument("--build", action="store_true", help="Compile firmware using PlatformIO before merging")
     parser.add_argument("--output-dir", default="release", help="Directory to save merged binaries (default: release)")
@@ -150,7 +150,7 @@ def main():
     os.chdir(project_root)
 
     print("=" * 70)
-    print(" MotoNav Stopwatch: ESP32-S3 Factory Firmware Merger (M5Burner Ready)")
+    print(" esp32Nav Stopwatch: ESP32-S3 Factory Firmware Merger (M5Burner Ready)")
     print("=" * 70)
 
     # 1. 如需编译，先调用 pio run
@@ -216,8 +216,8 @@ def main():
     out_dir = os.path.join(project_root, args.output_dir)
     os.makedirs(out_dir, exist_ok=True)
 
-    factory_bin = os.path.join(out_dir, "MotoNav_stopwatch_factory_0x0000.bin")
-    app_ota_bin = os.path.join(out_dir, "MotoNav_stopwatch_app_ota_0x10000.bin")
+    factory_bin = os.path.join(out_dir, "esp32Nav_stopwatch_factory_0x0000.bin")
+    app_ota_bin = os.path.join(out_dir, "esp32Nav_stopwatch_app_ota_0x10000.bin")
 
     print("\n[Step 3/4] Merging all segments into a single factory binary...")
 
@@ -266,13 +266,13 @@ def main():
     print("\n[烧录指南 Flash Instructions]:")
     print("方法 A: M5Burner 官方工具烧录 / 自定义固件导入 (推荐)")
     print("  1. 打开 M5Burner，选择设备型号 Stopwatch。")
-    print("  2. 在自定义固件（Burn / Custom）中选择 MotoNav_stopwatch_factory_0x0000.bin")
+    print("  2. 在自定义固件（Burn / Custom）中选择 esp32Nav_stopwatch_factory_0x0000.bin")
     print("  3. 烧录起始地址填 0x0000，连接设备串口后点击 Burn 即可一键刷入！\n")
 
     print("方法 B: 网页一键刷机 (免驱动免安装环境)")
     print("  1. 打开 ESP Web Flasher (如 https://espressif.github.io/esptool-js/ 或 https://web.esphome.io/)")
     print("  2. 连接设备 COM 口，波特率 921600")
-    print("  3. 添加文件: MotoNav_stopwatch_factory_0x0000.bin，地址填 0x0000")
+    print("  3. 添加文件: esp32Nav_stopwatch_factory_0x0000.bin，地址填 0x0000")
     print("  4. 点击 Program 即可完整烧录并开机！\n")
 
     print("方法 C: 命令行工具 esptool 烧录")

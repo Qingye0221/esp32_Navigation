@@ -25,7 +25,7 @@ find "$STAGE" -name embedded.mobileprovision -delete
 # Plain build products can retain compiler source paths in debug symbol tables.
 xcrun strip -S "$STAGE/Payload/MotoNav.app/MotoNav"
 xcrun strip -S "$STAGE/Payload/MotoNav.app/PlugIns/MotoNavShare.appex/MotoNavShare"
-IPA="$OUT/MotoNav-$VERSION-unsigned.ipa"
+IPA="$OUT/esp32Nav-$VERSION-unsigned.ipa"
 rm -f "$IPA"
 (cd "$STAGE" && /usr/bin/zip -qry "$IPA" Payload)
 (cd "$OUT" && shasum -a 256 "$(basename "$IPA")" > SHA256SUMS.txt)

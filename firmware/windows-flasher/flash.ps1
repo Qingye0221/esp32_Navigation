@@ -1,4 +1,4 @@
-﻿param([switch]$VerifyOnly)
+param([switch]$VerifyOnly)
 $ErrorActionPreference='Stop'
 $taskRoot=$PSScriptRoot
 $taskEsp=Join-Path $taskRoot 'tools\esptool.exe'
@@ -49,7 +49,7 @@ try {
     $taskFullFile=Resolve-PackageFile $taskPanel.full $true
     if(-not(Test-Path -LiteralPath $taskEsp -PathType Leaf)){throw '缺少tools\esptool.exe，请完整解压ZIP。'}
     Write-Host ''
-    Write-Host 'MotoNav 1.75 通用固件 7.12.10-pages.4 一键烧录包' -ForegroundColor Magenta
+    Write-Host 'esp32Nav 1.75 通用固件 7.12.10-pages.4 一键烧录包' -ForegroundColor Magenta
     Write-Host '修复开机重启；固定页面与时间；通用品牌开机' -ForegroundColor Cyan
     if($VerifyOnly){
         & $taskEsp version | Out-Host
@@ -58,7 +58,7 @@ try {
         exit 0
     }
     Write-Host '只适用于微雪1.75 AMOLED；不能刷到1.85B或M5Stack StopWatch。'
-    Write-Host '  1. 已有同板型、同分区MotoNav：升级，保留设置和配对（默认）'
+    Write-Host '  1. 已有同板型、同分区esp32Nav：升级，保留设置和配对（默认）'
     Write-Host '  2. 首次安装/救砖：完整刷写，整片擦除，会清空设置和配对'
     while($true){
         $taskMode=(Read-Host '输入1或2；回车默认升级；Q退出').Trim()

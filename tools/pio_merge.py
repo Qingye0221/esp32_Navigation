@@ -18,5 +18,5 @@ env.AddCustomTarget(
     dependencies=["$BUILD_DIR/${PROGNAME}.bin"],
     actions=[merge_bin_action],
     title="Merge Factory Binary",
-    description="Merges bootloader, partitions, boot_app0, and app into release/MotoNav_stopwatch_factory_0x0000.bin"
+    description="Merges bootloader, partitions, boot_app0, and app into release/esp32Nav_stopwatch_factory_0x0000.bin"
 )

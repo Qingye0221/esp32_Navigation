@@ -90,8 +90,25 @@ public final class RasterCompressionDeltaTest {
             throw new AssertionError("Odd shift delta decoded grid mismatch");
         }
 
-        System.out.printf("PASS: Raster compression & delta (raw=%dB, fullZ=%dB, bldDelta=%dB, shiftDelta=%dB)%n",
-            nextAlignedPkt.length, alignedFullWire.length, bldDeltaWire.length, alignedDeltaWire.length);
+        // 6. Macro map (1200x1200, 6000 mm/px encoded as 600 in 12-bit MM_MASK)
+        int mw = 1200, mh = 1200;
+        byte[] macroGrid = makeSyntheticMap(mw, mh, 0, 0, false);
+        byte[] macroPkt = encodeRaster(101, -3600, 3600, mw, mh, 6000, macroGrid);
+        if (!RasterPacket.valid(macroPkt, 101, -3600, 3600)) {
+            throw new AssertionError("Macro 6000mm packet must pass RasterPacket.valid()");
+        }
+        byte[] macroWire = RasterPacket.forWire(macroPkt, null, true, true);
+        if ((u16(macroWire, 14) & RasterPacket.FLAG_DEFLATE) == 0 || (u16(macroWire, 14) & RasterPacket.FLAG_DELTA) != 0) {
+            throw new AssertionError("Macro full packet must use DEFLATE and NOT trigger DELTA flag");
+        }
+        byte[] macroTiledBuf = new byte[(mw * mh + 1) / 2];
+        byte[] decodedMacro = firmwareSimulateDecode(macroWire, null, 0, 0, macroTiledBuf);
+        if (!Arrays.equals(macroGrid, decodedMacro)) {
+            throw new AssertionError("Macro 6000mm decoded grid mismatch");
+        }
+
+        System.out.printf("PASS: Raster compression & delta (raw=%dB, fullZ=%dB, bldDelta=%dB, shiftDelta=%dB, macroZ=%dB)%n",
+            nextAlignedPkt.length, alignedFullWire.length, bldDeltaWire.length, alignedDeltaWire.length, macroWire.length);
     }
 
     private static byte[] encodeRaster(int frameId, int x0, int y0, int w, int h, int flags, byte[] idx) {
@@ -101,7 +118,10 @@ public final class RasterCompressionDeltaTest {
         writeI32(b, y0);
         writeU16(b, w);
         writeU16(b, h);
-        writeU16(b, flags);
+        int flagBits = flags & 0xC000;
+        int cleanMm = flags & 0x3FFF;
+        int wireMm = (cleanMm > 4000) ? (cleanMm / 10) : cleanMm;
+        writeU16(b, flagBits | (wireMm & 0x0FFF));
         int i = 0, n = w * h;
         while (i < n) {
             int c = idx[i] & 15;

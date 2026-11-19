@@ -206,11 +206,11 @@ object BleLink {
                 val known = last?.let { runCatching { ad.getRemoteDevice(it) }.getOrNull() }
                     ?: (appContext?.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
                         ?.getConnectedDevices(BluetoothProfile.GATT)
-                        ?.filter { it.address != skipAddr && (it.name == "MotoNav" || it.name?.startsWith("MotoNav-") == true) }
+                        ?.filter { it.address != skipAddr && (it.name == "esp32Nav" || it.name?.startsWith("esp32Nav-") == true || it.name == "MotoNav" || it.name?.startsWith("MotoNav-") == true) }
                         ?.singleOrNull()
                 if (known != null) {
                     triedDirect = true
-                    connectDevice(known, known.name ?: "MotoNav")
+                    connectDevice(known, known.name ?: "esp32Nav")
                     return
                 }
             }
@@ -304,7 +304,7 @@ object BleLink {
 
     private fun connectTo(r: ScanResult) {
         if (!scanning || gatt != null) return
-        connectDevice(r.device, r.scanRecord?.deviceName ?: r.device.name ?: "MotoNav")
+        connectDevice(r.device, r.scanRecord?.deviceName ?: r.device.name ?: "esp32Nav")
     }
 
     private fun connectDevice(device: BluetoothDevice, name: String) {
@@ -976,7 +976,7 @@ object BleLink {
             pairHint = "圆屏不认识这台手机的旧配对了，已自动清掉，正在重连：手机弹出配对框时输入圆屏上的 6 位数字"
         } else {
             needUnbond = true
-            pairHint = "圆屏不认识这台手机的旧配对了：点这里打开系统蓝牙设置，在已配对设备里对 ${screenName.ifEmpty { "MotoNav" }} 点「取消配对 / 忽略」，" +
+            pairHint = "圆屏不认识这台手机的旧配对了：点这里打开系统蓝牙设置，在已配对设备里对 ${screenName.ifEmpty { "esp32Nav" }} 点「取消配对 / 忽略」，" +
                 "再回来会自动重连，输入圆屏上的配对码"
         }
     }

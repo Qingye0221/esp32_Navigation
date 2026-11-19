@@ -123,7 +123,7 @@ object MapFeeder {
 
     fun setUserZoom(z: Double) {
         val oldHalf = desiredHalf(userZoom, satMode())
-        userZoom = z.coerceIn(0.10, 1.00)
+        userZoom = z.coerceIn(0.20, 1.00)
         val newHalf = desiredHalf(userZoom, satMode())
         if (!enabled || routeOnly() || satMode()) return
 

@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ======================================================================
-echo  MotoNav Stopwatch: 出厂固件一键烧录工具 (Offset: 0x0000)
+echo  esp32Nav Stopwatch: 出厂固件一键烧录工具 (Offset: 0x0000)
 echo ======================================================================
 
 set ESPTOOL="D:\GreenPrograms\M5Burner-v3-beta-win-x64\packages\tool\esptool.exe"
@@ -10,7 +10,7 @@ if not exist %ESPTOOL% (
     set ESPTOOL=esptool.exe
 )
 
-set BIN_FILE="release\MotoNav_stopwatch_factory_0x0000.bin"
+set BIN_FILE="release\esp32Nav_stopwatch_factory_0x0000.bin"
 if not exist %BIN_FILE% (
     echo [提示] 未检测到合并固件，正在自动生成...
     "%USERPROFILE%\.platformio\penv\Scripts\python.exe" tools\merge_firmware.py --env stopwatch

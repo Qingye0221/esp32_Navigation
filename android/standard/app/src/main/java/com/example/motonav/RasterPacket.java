@@ -62,11 +62,16 @@ public final class RasterPacket {
         out.write((v >>> 24) & 255);
     }
 
+    public static int decodeMm(int flags) {
+        int raw = flags & MM_MASK;
+        return (raw > 0 && raw < 1000) ? (raw * 10) : raw;
+    }
+
     public static boolean valid(byte[] b, int frame, int x, int y) {
         if (b == null || b.length < 17 || b.length > 480000 || u16(b, 0) != frame || i32(b, 2) != x || i32(b, 6) != y ||
             u16(b, 10) != 1200 || u16(b, 12) != 1200) return false;
         int flags = u16(b, 14);
-        int mm = flags & MM_MASK;
+        int mm = decodeMm(flags);
         if (mm != 2000 && mm != 3500 && mm != 4000 && mm != 5000 && mm != 6000) return false;
         if ((flags & FLAG_BUILDINGS) != 0 && (flags & FLAG_PALETTE) != 0) return false;
         if ((flags & FLAG_PALETTE) != 0 && !hasPalette(b)) return false;
@@ -168,8 +173,8 @@ public final class RasterPacket {
         if (frame != u16(reference, 0)) return null;
         int w = u16(current, 10), h = u16(current, 12);
         if (w <= 0 || h <= 0 || w != u16(reference, 10) || h != u16(reference, 12) || (long) w * h > 1690000L) return null;
-        int mm = u16(current, 14) & MM_MASK;
-        if (mm <= 0 || mm != (u16(reference, 14) & MM_MASK)) return null;
+        int mm = decodeMm(u16(current, 14));
+        if (mm <= 0 || mm != decodeMm(u16(reference, 14))) return null;
         int x0 = i32(current, 2), y0 = i32(current, 6);
         int refX0 = i32(reference, 2), refY0 = i32(reference, 6);
         long dx = (long) x0 - refX0, dy = (long) refY0 - y0;

@@ -45,21 +45,33 @@ class NavService : Service() {
         fun stop(context: Context) {
             context.stopService(Intent(context, NavService::class.java))
         }
+
+        fun updateBackgroundLocation(connected: Boolean) {
+            val s = instance ?: return
+            if (connected) {
+                if (s.bgLocationClient == null) {
+                    try {
+                        val client = com.amap.api.location.AMapLocationClient(s.applicationContext)
+                        client.enableBackgroundLocation(NOTIFY_ID, s.buildNotification())
+                        s.bgLocationClient = client
+                        android.util.Log.i("NavService", "AMap background location enabled")
+                    } catch (t: Throwable) {
+                        android.util.Log.w("NavService", "enableBackgroundLocation failed: ${t.message}")
+                    }
+                }
+            } else {
+                try {
+                    s.bgLocationClient?.disableBackgroundLocation(true)
+                    s.bgLocationClient?.onDestroy()
+                } catch (_: Throwable) {}
+                s.bgLocationClient = null
+                android.util.Log.i("NavService", "AMap background location disabled")
+            }
+        }
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var bgLocationClient: com.amap.api.location.AMapLocationClient? = null
-
-    private fun bindAmapBackgroundLocation(notif: Notification) {
-        try {
-            val client = com.amap.api.location.AMapLocationClient(applicationContext)
-            client.enableBackgroundLocation(NOTIFY_ID, notif)
-            bgLocationClient = client
-            android.util.Log.i("NavService", "AMap background location enabled")
-        } catch (t: Throwable) {
-            android.util.Log.w("NavService", "enableBackgroundLocation failed: ${t.message}")
-        }
-    }
 
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -78,7 +90,8 @@ class NavService : Service() {
             } else {
                 startForeground(NOTIFY_ID, notif)
             }
-            bindAmapBackgroundLocation(notif)
+            instance = this
+            updateBackgroundLocation(BleLink.isConnected)
         } catch (e: Exception) {
             // 权限还没给全时会走到这里：先停掉，授权后再启动
             BleLink.status = "后台服务启动失败，请先点「1. 授予权限」：${e.message}"
@@ -88,7 +101,6 @@ class NavService : Service() {
         running = true
 
         // 优化功耗：按需延迟申请 WakeLock，避免服务一旦启动永久唤醒 CPU 导致待机耗电
-        instance = this
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MotoNav:nav").apply {
             setReferenceCounted(false)
@@ -121,11 +133,7 @@ class NavService : Service() {
         TrafficLightOverlay.stop()
         TrafficPositionMonitor.stop()
         BleLink.stopAuto()
-        try {
-            bgLocationClient?.disableBackgroundLocation(true)
-            bgLocationClient?.onDestroy()
-        } catch (_: Throwable) {}
-        bgLocationClient = null
+        updateBackgroundLocation(false)
         try { wakeLock?.release() } catch (_: Exception) {}
         wakeLock = null; instance = null
         super.onDestroy()

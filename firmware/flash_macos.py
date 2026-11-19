@@ -81,7 +81,7 @@ def flash_command(tool, port, image, full=False):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Mac 一键烧录 MotoNav 1.75 英寸圆屏固件（默认应用升级）")
+    parser = argparse.ArgumentParser(description="Mac 一键烧录 esp32Nav 1.75 英寸圆屏固件（默认应用升级）")
     parser.add_argument("--check", action="store_true", help="仅检查工具、固件和串口，不烧录")
     parser.add_argument("--port", help="指定实际 USB 串口，例如 /dev/cu.usbmodem…")
     parser.add_argument("--full", action="store_true", help="首次完整安装，替换引导与分区布局")
@@ -90,7 +90,7 @@ def main(argv=None):
         tool = find_tool()
         version, images = validate_images()
         ports = usb_ports()
-        print("MotoNav v" + version + " · 微雪 1.75 英寸圆屏", flush=True)
+        print("esp32Nav v" + version + " · 微雪 1.75 英寸圆屏", flush=True)
         print("工具：" + tool, flush=True)
         print("固件 SHA-256 与应用偏移校验通过。", flush=True)
         if args.check:

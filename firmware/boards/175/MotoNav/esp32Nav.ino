@@ -418,7 +418,7 @@ void setup() {
     themeIdx = pr.getInt("maptheme", 1);
     if (themeIdx < 0 || themeIdx >= THEME_N) themeIdx = 1;
     userMapScale = pr.getFloat("mapzoom", 0.7f);
-    if (userMapScale < 0.1f || userMapScale > 1.0f || isnan(userMapScale)) userMapScale = 0.7f;
+    if (userMapScale < 0.2f || userMapScale > 1.0f || isnan(userMapScale)) userMapScale = 0.7f;
     int savedBright = constrain(pr.getInt("brightness", 200), 5, 255);
     pr.end();
     if (qspiMHz != 40 && qspiMHz != 60 && qspiMHz != 80) qspiMHz = 40;

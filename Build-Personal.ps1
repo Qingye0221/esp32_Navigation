@@ -1,4 +1,4 @@
-﻿param([string]$JavaPath='', [string]$SdkPath='', [string]$GradlePath='', [string]$Language='', [switch]$Offline)
+param([string]$JavaPath='', [string]$SdkPath='', [string]$GradlePath='', [string]$Language='', [switch]$Offline)
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $root = $PSScriptRoot
@@ -188,18 +188,19 @@ if ($appId -notmatch '^org\.esp32nav\.u[a-f0-9]{32}$') { throw 'personal.propert
 if (-not (Test-Path $signing)) {
     if (Test-Path $keyfile) { throw 'keystore.properties 缺失，请从备份中恢复。' }
     $password = [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')
-    $env:MOTONAV_SIGN_PASSWORD = $password
-    & "$JavaPath/bin/keytool.exe" -genkeypair -storetype JKS -keystore $keyfile -storepass:env MOTONAV_SIGN_PASSWORD -keypass:env MOTONAV_SIGN_PASSWORD -alias motonav -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=MotoNav Personal,O=MotoNav,C=CN'
+    $env:ESP32NAV_SIGN_PASSWORD = $password
+    & "$JavaPath/bin/keytool.exe" -genkeypair -storetype JKS -keystore $keyfile -storepass:env ESP32NAV_SIGN_PASSWORD -keypass:env ESP32NAV_SIGN_PASSWORD -alias esp32nav -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=esp32Nav Personal,O=esp32Nav,C=CN'
     if ($LASTEXITCODE -ne 0) { throw '专属签名数字证书生成失败。' }
-    [IO.File]::WriteAllText($signing, "storeFile=personal.jks`nstorePassword=$password`nkeyAlias=motonav`nkeyPassword=$password`n")
+    [IO.File]::WriteAllText($signing, "storeFile=personal.jks`nstorePassword=$password`nkeyAlias=esp32nav`nkeyPassword=$password`n")
 }
 if (-not (Test-Path $keyfile)) { throw '未找到 personal.jks 证书文件。' }
 
 $props = ConvertFrom-StringData ([IO.File]::ReadAllText($signing))
-$env:MOTONAV_SIGN_PASSWORD = $props.storePassword
+$env:ESP32NAV_SIGN_PASSWORD = $props.storePassword
+$keyAlias = if ($props.keyAlias) { $props.keyAlias } else { "esp32nav" }
 $out = Join-Path $root 'output'
 New-Item -ItemType Directory -Force $out | Out-Null
-& "$JavaPath/bin/keytool.exe" -exportcert -keystore $keyfile -storepass:env MOTONAV_SIGN_PASSWORD -alias motonav -file "$out/certificate.der"
+& "$JavaPath/bin/keytool.exe" -exportcert -keystore $keyfile -storepass:env ESP32NAV_SIGN_PASSWORD -alias $keyAlias -file "$out/certificate.der"
 if ($LASTEXITCODE -ne 0) { throw '证书公钥导出失败。' }
 $fingerprint = (Get-FileHash -LiteralPath "$out/certificate.der" -Algorithm SHA1).Hash -replace '(..)(?!$)', '$1:'
 

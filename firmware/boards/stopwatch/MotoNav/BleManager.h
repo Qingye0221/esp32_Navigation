@@ -131,7 +131,7 @@ void hidMediaTick() {
 }
 void initMediaHid(BLEServer *server) {
   mediaHid = new BLEHIDDevice(server);
-  mediaHid->manufacturer()->setValue("MotoNav");
+  mediaHid->manufacturer()->setValue("esp32Nav");
   // DIY/private device identity, not a borrowed keyboard vendor/product ID.
   const uint8_t identity[7] = {0x01, 0xFF, 0xFF, 0x01, 0x00, 0x00, 0x01};
   mediaHid->deviceInfo()->getCharacteristic(BLEUUID((uint16_t)0x2A50))->setValue(const_cast<uint8_t*>(identity), sizeof(identity));

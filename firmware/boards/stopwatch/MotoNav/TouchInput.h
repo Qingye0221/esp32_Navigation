@@ -297,6 +297,7 @@ void touchPoll() {
           mapZoomStartY = cy0;
           mapZoomStartScale = userMapScale;
           mapZoomHintUntil = now + 2500;
+          mapZoomBtnUntil = now + 10000;
           dragAbort(); // 拦截页面拖拽换页
           CompanionMode::startVibration(50, 20);
         }
@@ -406,11 +407,13 @@ void touchPoll() {
       int cy1 = (int)lroundf(CX + tdy1);
       float dy = (float)(cy1 - mapZoomStartY); // 画布方向：dy < 0 向上滑放大，dy > 0 向下滑缩小
       
-      // 线性平滑手感：上下滑动行程对应缩放 0.10x ~ 1.00x
-      float targetScale = constrain(mapZoomStartScale - dy * 0.0065f, 0.10f, 1.00f);
+      // 线性平滑手感：上下滑动行程对应缩放 0.20x ~ 1.00x
+      float targetScale = constrain(mapZoomStartScale - dy * 0.0065f, 0.20f, 1.00f);
       if (fabsf(targetScale - userMapScale) >= 0.008f) {
-        userMapScale += (targetScale - userMapScale) * 0.55f;
+        userMapScale = constrain(userMapScale + (targetScale - userMapScale) * 0.55f, 0.20f, 1.00f);
+        userZoomOverridden = true; // 用户手动设置，当前速度区间临时生效
         mapZoomHintUntil = now + 2000;
+        mapZoomBtnUntil = now + 10000;
         navDirty = true;
       }
     }
@@ -429,6 +432,7 @@ void touchPoll() {
       touchEat = true;
       mapZoomSaveAt = now + 1500;
       mapZoomHintUntil = now + 2000;
+      mapZoomBtnUntil = now + 10000;
 
       float tdx0 = touchX0 - CX, tdy0 = touchY0 - CX;
       touchVectorToCanvas(tdx0, tdy0);
@@ -447,8 +451,9 @@ void touchPoll() {
           userMapScale = min(1.00f, userMapScale + 0.10f);
         } else {
           // 点在减号附近 (下半区)：缩小 0.1x
-          userMapScale = max(0.10f, userMapScale - 0.10f);
+          userMapScale = max(0.20f, userMapScale - 0.10f);
         }
+        userZoomOverridden = true; // 用户手动设置，当前速度区间临时生效
       }
       CompanionMode::startVibration(70, 25);
       if (bleConnected) pendingEvt = "T,ZOOM," + String((int)lroundf(userMapScale * 100.0f));

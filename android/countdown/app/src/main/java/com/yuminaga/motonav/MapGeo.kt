@@ -443,7 +443,10 @@ object MapGeo {
         fun u8(v: Int) = b.write(v and 0xFF)
         fun u16(v: Int) { u8(v); u8(v shr 8) }
         fun i32(v: Int) { u8(v); u8(v shr 8); u8(v shr 16); u8(v shr 24) }
-        u16(frameId); i32(x0); i32(y0); u16(w); u16(h); u16(if (pal != null) (mmPerPx or 0x8000) else mmPerPx)
+        val flagBits = (if (pal != null) 0x8000 else 0) or (mmPerPx and 0xC000)
+        val cleanMm = mmPerPx and 0x3FFF
+        val wireMm = if (cleanMm > 4000) (cleanMm / 10) else cleanMm
+        u16(frameId); i32(x0); i32(y0); u16(w); u16(h); u16(flagBits or (wireMm and 0x0FFF))
         if (pal != null) for (i in 0 until 16) u16(if (i < pal.size) pal[i] else 0)
         var i = 0
         val n = w * h

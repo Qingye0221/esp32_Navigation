@@ -45,7 +45,7 @@ def package(output, dest, version, board_info):
     if not app or app[0] != 0xE9 or merged[0x10000:0x10000 + len(app)] != app:
         raise ValueError('Invalid ESP32 image or unexpected application offset')
     dest.mkdir(parents=True, exist_ok=True)
-    label = f"MotoNav_universal_{board_info['label']}_v{version}_panel0"
+    label = f"esp32Nav_universal_{board_info['label']}_v{version}_panel0"
     entries = []
     for suffix, data in [('app_0x10000', app), ('full_0x0', merged[:0x10000 + len(app)])]:
         name = f'{label}_{suffix}.bin'

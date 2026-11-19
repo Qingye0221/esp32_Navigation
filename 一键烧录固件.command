@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Finder 双击运行；默认升级现有 MotoNav，不自动进行完整安装。
+# Finder 双击运行；默认升级现有 esp32Nav，不自动进行完整安装。
 task_root="${0:A:h}"
 /usr/bin/python3 "$task_root/firmware/flash_macos.py" "$@"
 task_result=$?

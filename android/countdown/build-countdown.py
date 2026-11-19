@@ -81,7 +81,7 @@ def main():
     for name in ['moto-code','car-code']:tool('b',ROOT/name,'-o',ROOT/(name+'.apk'),'-p',ROOT/'framework')
     for name in ['prepare-merge.py','compile-manifest.py','pack.py']:run([sys.executable,ROOT/name])
     key=ROOT/'.local/debug.keystore';out=ROOT/'output';out.mkdir(exist_ok=True)
-    aligned=out/'countdown-aligned.apk';final=out/f'MotoNav-{VERSION}-countdown.apk'
+    aligned=out/'countdown-aligned.apk';final=out/f'esp32Nav-{VERSION}-countdown.apk'
     run([bt/'zipalign.exe','-f','4',ROOT/'fusion-unsigned.apk',aligned])
     run([bt/'apksigner.bat','sign','--ks',key,'--ks-pass','pass:android','--key-pass','pass:android',
          '--ks-key-alias','androiddebugkey','--out',final,aligned])

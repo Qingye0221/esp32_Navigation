@@ -1,4 +1,4 @@
-# MotoNav iOS 版（版本见 MotoNav/Config.swift）
+# esp32Nav iOS 版（版本见 MotoNav/Config.swift）
 # 高德导航（自带 3D 地图）+ 高德搜索
 platform :ios, '15.0'
 

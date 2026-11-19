@@ -50,8 +50,8 @@ bool altValid = false;
 #define TEXT_R       200   // 文字必须在这个半径以内（圆环内沿约 215）
 
 // ===== 蓝牙：手机端必须用同样的名字和 UUID =====
-#define DEVICE_NAME  "MotoNav"
-String bleName = DEVICE_NAME;        // v7.0 实际蓝牙名 "MotoNav-XXXX"（XXXX = 蓝牙地址最后两个字节），开机时算好
+#define DEVICE_NAME  "esp32Nav"
+String bleName = DEVICE_NAME;        // v7.0 实际蓝牙名 "esp32Nav-XXXX"（XXXX = 蓝牙地址最后两个字节），开机时算好
 #define SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define RX_UUID      "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define TX_UUID      "6e400003-b5a3-f393-e0a9-e50e24dcca9e"   // v2.0 圆屏 → 手机通知
@@ -167,15 +167,64 @@ bool hidMediaReady();
 bool wxDirty = false;                 // v5.3 天气页要重画
 
 // ===== 地图右侧边缘滑动缩放控制 =====
-float userMapScale = 1.0f;           // 用户手动设定的基础缩放比例 (默认 1.0x，范围 0.1x ~ 1.0x)
+float userMapScale = 1.0f;           // 缩放比例 (默认 1.0x，范围 0.2x ~ 1.0x)
 bool mapZoomActive = false;          // 是否正在右侧边缘滑动缩放地图
 uint32_t mapZoomHintUntil = 0;       // 缩放提示卡片显示截止时间
+uint32_t mapZoomBtnUntil = 0;        // 缩放加减按钮显示截止时间（操作后或刚进入导航时显示10s）
 int16_t mapZoomStartX = 0;           // 滑动初始 X
 int16_t mapZoomStartY = 0;           // 滑动初始 Y
 float mapZoomStartScale = 1.0f;      // 滑动初始基础比例
 uint32_t lastMapTapAt = 0;           // 保留兼容
 int16_t lastMapTapX = 0, lastMapTapY = 0;
 unsigned long mapZoomSaveAt = 0;     // 缩放保存到 NVS 的延迟时间
+
+// ===== 车速分段自适应缩放 =====
+// <40km/h: 1.0x | 40-60km/h: 0.8x | 60-80km/h: 0.6x | 80-100km/h: 0.4x | >=100km/h: 0.2x
+int currentSpeedZone = -1;           // 当前速度区间 (-1: 未初始化, 0: <40, 1: 40-60, 2: 60-80, 3: 80-100, 4: >=100)
+bool userZoomOverridden = false;     // 用户是否在当前速度区间临时手动调整了缩放（跨区间时清除重置）
+
+static inline int calculateSpeedZone(float kmh, int curZone) {
+  if (kmh < 0.0f) kmh = 0.0f;
+  const float HYST = 1.5f; // 1.5 km/h 迟滞防抖门限
+  if (curZone < 0) {
+    if (kmh < 40.0f) return 0;
+    if (kmh < 60.0f) return 1;
+    if (kmh < 80.0f) return 2;
+    if (kmh < 100.0f) return 3;
+    return 4;
+  }
+  switch (curZone) {
+    case 0:
+      if (kmh >= 40.0f + HYST) return (kmh >= 60.0f) ? calculateSpeedZone(kmh, -1) : 1;
+      return 0;
+    case 1:
+      if (kmh < 40.0f - HYST) return 0;
+      if (kmh >= 60.0f + HYST) return (kmh >= 80.0f) ? calculateSpeedZone(kmh, -1) : 2;
+      return 1;
+    case 2:
+      if (kmh < 60.0f - HYST) return (kmh < 40.0f) ? calculateSpeedZone(kmh, -1) : 1;
+      if (kmh >= 80.0f + HYST) return (kmh >= 100.0f) ? calculateSpeedZone(kmh, -1) : 3;
+      return 2;
+    case 3:
+      if (kmh < 80.0f - HYST) return (kmh < 60.0f) ? calculateSpeedZone(kmh, -1) : 2;
+      if (kmh >= 100.0f + HYST) return 4;
+      return 3;
+    case 4:
+    default:
+      if (kmh < 100.0f - HYST) return (kmh < 80.0f) ? calculateSpeedZone(kmh, -1) : 3;
+      return 4;
+  }
+}
+
+static inline float getSpeedZoneScale(int zone) {
+  switch (zone) {
+    case 0: return 1.0f;
+    case 1: return 0.8f;
+    case 2: return 0.6f;
+    case 3: return 0.4f;
+    case 4: default: return 0.2f;
+  }
+}
 
 // 手机状态（蓝牙连接后由 App 同步，#BAT,<pct>,<charging>,<sig1>,<sig2>）
 int8_t phoneBatPct = -1;             // 手机电量 0~100，-1 表示未连接/未知
