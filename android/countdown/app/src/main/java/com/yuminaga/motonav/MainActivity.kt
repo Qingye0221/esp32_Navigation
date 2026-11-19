@@ -688,10 +688,12 @@ class MainActivity : AppCompatActivity() {
                 searching -> BleLink.status
                 else -> "圆屏未连接"
             }
-            sub.setTextColor(if (BleLink.needUnbond) AMBER else SUB)
+            val hasWarn = BleLink.versionWarning.isNotEmpty()
+            sub.setTextColor(if (BleLink.needUnbond || hasWarn) AMBER else SUB)
             sub.text = when {
                 BleLink.pairHint.isNotEmpty() && !BleLink.verified -> BleLink.pairHint      // v6.4 配对提示
-                conn && BleLink.verified -> "已配对验证"
+                conn && BleLink.verified && hasWarn -> BleLink.versionWarning
+                conn && BleLink.verified -> "已配对验证" + (if (BleLink.firmwareVersion.isNotEmpty()) "（固件 ${BleLink.firmwareVersion}）" else "")
                 conn -> "正在验证配对…"
                 else -> BleLink.status
             }
@@ -1268,7 +1270,7 @@ class MainActivity : AppCompatActivity() {
                 val crash = CrashLog.last()
                 info.text = (if (crash.isNotEmpty()) "⚠ 上次闪退（截图发出来；长按这里清除）：\n$crash\n\n" else "") +
                     "Key：${Keys.applyInfo}\n" +
-                    "圆屏：${BleLink.statsText()}\n${BleLink.screenStats}\n" +
+                    "圆屏：${BleLink.statsText()} 固件:${BleLink.firmwareBoard.ifEmpty { "未知" }}/${BleLink.firmwareVersion.ifEmpty { "未知" }}\n${BleLink.screenStats}\n" +
                     (if (BleLink.screenProf.isNotEmpty()) "${BleLink.screenProf}\n" else "") + "\n" +
                     "小地图：${MapFeeder.infoText()}\n\n" +
                     "导航：${NaviBridge.lastInfo}\n" +

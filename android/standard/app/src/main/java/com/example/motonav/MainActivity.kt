@@ -323,10 +323,12 @@ class MainActivity : AppCompatActivity() {
         row.setOnClickListener { mainPages.showPage(1) }
         refreshers += {
             val ready = BleLink.isConnected && BleLink.verified
-            setDot(dot, if (ready) GREEN else AMBER)
-            state.text = if (ready) BleLink.screenName.ifBlank { "圆屏" } + " 已连接" +
-                (if (BleLink.screenBatteryPct >= 0) " · ${BleLink.screenBatteryPct}%" else "")
-                else if (BleLink.isConnected) "圆屏正在验证配对" else "圆屏未连接"
+            setDot(dot, if (ready) (if (BleLink.versionWarning.isNotEmpty()) AMBER else GREEN) else AMBER)
+            state.text = if (ready) {
+                val fw = if (BleLink.firmwareVersion.isNotEmpty()) " (${BleLink.firmwareVersion})" else ""
+                (if (BleLink.versionWarning.isNotEmpty()) BleLink.versionWarning else BleLink.screenName.ifBlank { "圆屏" } + " 已连接$fw") +
+                    (if (BleLink.screenBatteryPct >= 0) " · ${BleLink.screenBatteryPct}%" else "")
+            } else if (BleLink.isConnected) "圆屏正在验证配对" else "圆屏未连接"
         }
         return row
     }
@@ -696,10 +698,10 @@ class MainActivity : AppCompatActivity() {
                 searching -> BleLink.status
                 else -> "圆屏未连接"
             }
-            sub.setTextColor(if (BleLink.needUnbond) AMBER else SUB)
+            sub.setTextColor(if (BleLink.needUnbond || BleLink.versionWarning.isNotEmpty()) AMBER else SUB)
             sub.text = when {
                 BleLink.pairHint.isNotEmpty() && !BleLink.verified -> BleLink.pairHint      // v6.4 配对提示
-                conn && BleLink.verified -> "已配对验证"
+                conn && BleLink.verified -> if (BleLink.versionWarning.isNotEmpty()) BleLink.versionWarning else "已配对验证" + (if (BleLink.firmwareVersion.isNotEmpty()) "（固件 ${BleLink.firmwareVersion}）" else "")
                 conn -> "正在验证配对…"
                 else -> BleLink.status
             }

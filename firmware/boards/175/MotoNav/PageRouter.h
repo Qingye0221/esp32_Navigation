@@ -352,10 +352,10 @@ void settingsTick() {
   if (settingsDirty) { settingsDirty = false; drawSettingsPage(); }
 }
 
-// 每圈调用：倾角与 G 值刷新
+// 每圈调用：倾角与 G 值刷新（仅在倾角仪页面采样，其他页面彻底静默省电）
 void leanTick() {
-  LeanAngleMeter::update();
   if (page != 3 || callOn || pairOn || sliding) return;
+  LeanAngleMeter::update();
   static unsigned long lastLeanDraw = 0;
   if (millis() - lastLeanDraw >= 33 || leanDirty) {
     lastLeanDraw = millis();

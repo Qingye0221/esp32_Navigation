@@ -144,6 +144,9 @@ object BleLink {
     @Volatile var screenFps = ""                      // v2.6 给新界面用：帧率、屏幕速度、快速刷屏
     @Volatile var screenMhz = -1
     @Volatile var screenFast = -1
+    @Volatile var firmwareBoard = ""
+    @Volatile var firmwareVersion = ""
+    @Volatile var versionWarning = ""
     private var inFlight = 0
     private const val MAX_IN_FLIGHT = 2
     private var writeStartedAt = 0L
@@ -349,6 +352,7 @@ object BleLink {
         closeCurrent()
         triedDirect = false
         screenName = ""; screenBattery = ""; screenBatteryPct = -1
+        firmwareBoard = ""; firmwareVersion = ""; versionWarning = ""
         pairHint = ""; staleCount = 0; needUnbond = false
         connect(c)
     }
@@ -404,6 +408,12 @@ object BleLink {
             return
         }
         val p = msg.split(',')
+        if (p.size >= 3 && p[0] == "VER") {
+            firmwareBoard = p[1].lowercase()
+            firmwareVersion = p[2]
+            checkFirmwareCompatibility(firmwareBoard, firmwareVersion)
+            return
+        }
         if (p.size >= 2 && p[0] == "T" && p[1] == "EXIT_NAV") {
             handler.post { NaviBridge.exitNavi() }
             return
@@ -978,6 +988,21 @@ object BleLink {
             needUnbond = true
             pairHint = "圆屏不认识这台手机的旧配对了：点这里打开系统蓝牙设置，在已配对设备里对 ${screenName.ifEmpty { "esp32Nav" }} 点「取消配对 / 忽略」，" +
                 "再回来会自动重连，输入圆屏上的配对码"
+        }
+    }
+
+    private fun checkFirmwareCompatibility(board: String, verStr: String) {
+        val cleanVer = verStr.removePrefix("v").trim()
+        val isStopwatch = board.contains("stopwatch")
+        if (isStopwatch) {
+            val isLegacy = cleanVer.startsWith("7.") || cleanVer == "0.1"
+            versionWarning = if (isLegacy) {
+                "圆屏固件较旧($verStr)，建议升级至 v0.2 获取防撕裂与新版缩放"
+            } else {
+                ""
+            }
+        } else {
+            versionWarning = ""
         }
     }
 

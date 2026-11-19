@@ -154,4 +154,47 @@ void drawStatus() {
   needFlush = true;
 }
 
+// ===== 待机自适应动态调频（DFS 节能控制）=====
+extern bool callOn;
+extern bool pairOn;
+extern volatile bool pairReq;
+extern bool fxOn;
+extern bool mapZoomActive;
+extern unsigned long lastRxMs;
+static uint32_t lastHighPerfRequiredAt = 0;
+
+void updateCpuPerformance(bool inNavState, bool cruiseState, bool touchActive, bool slidingActive, int curPage) {
+  const uint32_t now = millis();
+  
+  // 必须保持 240MHz 全性能的场景：
+  // 1. 正在导航或巡航中 (inNav || cruiseOn)
+  // 2. 正在小地图缩放操作 (mapZoomActive)
+  // 3. 用户正在交互（触控中、滑动切页中、拖拽中）
+  // 4. 来电通知、配对画面、到达特效进行中
+  // 5. 处于倾角仪界面 (page == 3，需要高频陀螺仪与物理计算)
+  // 6. 处于伴侣表情界面 (page == 4，需要 30FPS 动画)
+  // 7. 最近 2.5 秒内收到过新的 BLE 数据包
+  bool needHighPerf = inNavState || cruiseState || touchActive || slidingActive ||
+                      callOn || pairOn || pairReq || fxOn || (curPage == 3) || (curPage == 4) ||
+                      mapZoomActive;
+
+  if (!needHighPerf && (uint32_t)(now - lastRxMs) < 2500) {
+    needHighPerf = true;
+  }
+
+  if (needHighPerf) {
+    lastHighPerfRequiredAt = now;
+    if (getCpuFrequencyMhz() < 240) {
+      setCpuFrequencyMhz(240);
+    }
+  } else {
+    // 待机状态：无操作超过 2 秒，降频至 80MHz 节能运行（CPU 功耗直降 65%）
+    if ((uint32_t)(now - lastHighPerfRequiredAt) >= 2000) {
+      if (getCpuFrequencyMhz() > 80) {
+        setCpuFrequencyMhz(80);
+      }
+    }
+  }
+}
+
 

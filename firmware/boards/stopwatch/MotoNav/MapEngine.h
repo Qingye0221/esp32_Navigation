@@ -1422,6 +1422,9 @@ void sendPendingAck() {
     lastAuthNotifyAt = millis();
     txChar->setValue((uint8_t *)"U,1", 3);
     txChar->notify();
+    String verMsg = String("VER,") + BOARD_NAME + "," + FW_VERSION;
+    txChar->setValue((uint8_t *)verMsg.c_str(), verMsg.length());
+    txChar->notify();
     txChar->setValue((uint8_t *)"CAP,HID,1", 9); txChar->notify();
     txChar->setValue((uint8_t *)"CAP,LYR,1", 9); txChar->notify();
     txChar->setValue((uint8_t *)"CAP,ZMAP,1", 10); txChar->notify();
