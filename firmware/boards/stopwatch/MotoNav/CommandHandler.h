@@ -227,6 +227,21 @@ void handleText(const String &m) {
     }
     return;
   }
+  if (m.startsWith("#PKB,")) {
+    String sub = m.substring(5);
+    if (sub == "0") {
+      pkBeaconDisarm();
+    } else if (sub == "PING") {
+      pkBeaconStartPing();
+    } else if (sub.startsWith("1")) {
+      int maxMin = 360;
+      int comma = sub.indexOf(',');
+      if (comma > 0) maxMin = sub.substring(comma + 1).toInt();
+      if (maxMin <= 0) maxMin = 360;
+      pkBeaconArm(maxMin, true);
+    }
+    return;
+  }
   if (m.startsWith("#RP,")) {
     String sub = m.substring(4);
     if (sub.startsWith("CLR,")) {

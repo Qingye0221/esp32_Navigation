@@ -458,6 +458,61 @@ class MainActivity : AppCompatActivity() {
 
         fun showHistory() {
             hist.removeAllViews()
+            // 阶段二：地库停车位记忆与反向寻车卡片
+            val curSpot = ParkingStore.current(this)
+            val parkBox = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(if (curSpot != null) android.graphics.Color.parseColor("#0F2942") else android.graphics.Color.parseColor("#141B27"))
+                    setStroke(dp(1), if (curSpot != null) android.graphics.Color.parseColor("#38BDF8") else android.graphics.Color.parseColor("#2A3548"))
+                }
+            }
+            if (curSpot != null) {
+                val mins = ((System.currentTimeMillis() - curSpot.timestampMs) / 60_000L).coerceAtLeast(0)
+                val beaconTag = if (curSpot.isBeaconActiveNow()) " · 圆屏信标已开" else ""
+                parkBox.addView(label("🅿  我的停车位：${curSpot.shortTitle()}", 15f, CYAN, bold = true))
+                parkBox.addView(label("已停 ${mins} 分钟$beaconTag（点击进入室内图与蓝牙寻车）", 12f, SUB).apply {
+                    setPadding(0, dp(2), 0, dp(8))
+                })
+                val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                btnRow.addView(pillButton("去寻车", CYAN) { FindMyCarActivity.open(this@MainActivity) }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f).apply { marginEnd = dp(6) }
+                })
+                btnRow.addView(pillButton("重新记车位", SUB) {
+                    ParkingUiHelper.showMarkParkingDialog(this@MainActivity) { showHistory() }
+                }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) }
+                })
+                btnRow.addView(pillButton("历史", SUB) {
+                    ParkingUiHelper.showParkingHistoryDialog(this@MainActivity) { showHistory() }
+                }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f)
+                })
+                parkBox.addView(btnRow)
+            } else {
+                parkBox.addView(label("🅿  地下车库停车记忆与寻车", 14f, CYAN, bold = true))
+                parkBox.addView(label("停好车可一键记住楼层/车位，并让圆屏离车后进入超低功耗蓝牙信标模式辅助找车", 12f, SUB).apply {
+                    setPadding(0, dp(2), 0, dp(8))
+                })
+                val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                btnRow.addView(pillButton("记住当前车位", CYAN) {
+                    ParkingUiHelper.showMarkParkingDialog(this@MainActivity) { showHistory() }
+                }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f).apply { marginEnd = dp(8) }
+                })
+                btnRow.addView(pillButton("历史记录", SUB) {
+                    ParkingUiHelper.showParkingHistoryDialog(this@MainActivity) { showHistory() }
+                }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f)
+                })
+                parkBox.addView(btnRow)
+            }
+            hist.addView(parkBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(8); bottomMargin = dp(4)
+            })
+
             val favorites = FavoritePlaces.load(this)
             hist.addView(label("★ 常用目的地", 14f, CYAN, bold = true).apply { setPadding(0, dp(12), 0, dp(2)) })
             if (favorites.isEmpty()) hist.addView(label("在路线规划页点「收藏到常用目的地」添加", 12f, SUB))
@@ -1585,14 +1640,27 @@ class MainActivity : AppCompatActivity() {
         handler.postDelayed({ refresh() }, 300)
     }
 
+    private val parkingStoreListener: () -> Unit = {
+        runOnUiThread {
+            if (searchInput?.text.isNullOrBlank()) refreshHomeIdle?.invoke()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         BleLink.resetScanBackoff()
         NavService.updateWakeLock()
+        ParkingStore.addListener(parkingStoreListener)
         if (searchInput?.text.isNullOrBlank()) refreshHomeIdle?.invoke()     // v6.3 选路线页回来：更新“最近去过”
     }
 
+    override fun onPause() {
+        ParkingStore.removeListener(parkingStoreListener)
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        ParkingStore.removeListener(parkingStoreListener)
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }

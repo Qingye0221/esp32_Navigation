@@ -328,6 +328,8 @@ bool fastFlushOn = true;          // v2.6 快速刷屏
 
 #include "PairScreen.h"
 
+#include "ParkingBeacon.h"
+
 #include "ArriveFx.h"
 
 #include "TouchInput.h"
@@ -579,6 +581,7 @@ void idlePowerOffShutdown() {
 }
 
 void loop() {
+  if (pkBeaconTick()) return;
   hidMediaTick();                                      // press/release without blocking navigation
   static uint32_t lyricConnectionEpoch = 0;
   if (lyricConnectionEpoch != mediaConnectionEpoch) {
@@ -707,14 +710,14 @@ void loop() {
   }
   if (fxOn) {
     static unsigned long lastFxDraw = 0;
-    if (!callOn && !pairOn && page == 0 && !sliding && millis() - lastFxDraw >= 33) {
+    if (!callOn && !pairOn && !pkCountdownActive && page == 0 && !sliding && millis() - lastFxDraw >= 33) {
       lastFxDraw = millis();
       drawArriveFx(millis() - fxAt);
     }
     wasFx = true;
   } else if (wasFx) {
     wasFx = false;
-    if (!callOn && !pairOn) {
+    if (!callOn && !pairOn && !pkBeaconSleeping && !pkCountdownActive) {
       if (page == 2) musicDirty = true;
       else if (page == 1) settingsDirty = true;
       else if (page == 3) leanDirty = true;
@@ -833,9 +836,10 @@ void loop() {
     frameIsMap = false;
   }
   idlePowerPollSupply();
-  // 导航中永远不能关机；伴侣模式(page == 4)由伴侣生命周期独立管理 5 分钟超时关机
-  const bool navigating = inNav || cruiseOn || idlePowerOffNavigationActive(
-      bleConnected && bleAuthed, inNav, cruiseOn, navDir == "A");
+  // 导航中永远不能关机；伴侣模式(page == 4)由伴侣生命周期独立管理 5 分钟超时关机；
+  // 停车寻车信标模式(pkBeaconArmed || pkBeaconSleeping)由 ParkingBeacon 独立管理超时与低电关机
+  const bool navigating = inNav || cruiseOn || pkBeaconArmed || pkBeaconSleeping || pkCountdownActive ||
+      idlePowerOffNavigationActive(bleConnected && bleAuthed, inNav, cruiseOn, navDir == "A");
   const bool interacting = pairOn || pairReq || callOn || touchDown || dragging || sliding || (page == 4);
   const bool due = !inNav && idlePowerOffDueOnBattery(&idlePowerOffTimer, millis(), navigating, interacting, &idlePowerSupply);
   if (due) {

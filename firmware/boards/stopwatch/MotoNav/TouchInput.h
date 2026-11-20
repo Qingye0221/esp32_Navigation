@@ -340,9 +340,19 @@ void touchPoll() {
           touchEat = true;
         }
       }
-      if (fxOn && !callOn) {
+      if (pkCountdownActive) {
+        // 5 秒信标倒计时界面：点击底部「取消」按钮区域中止倒计时
+        if (cx0 >= CX - 95 && cx0 <= CX + 95 && cy0 >= 350 && cy0 <= 425) {
+          pkBeaconCancelCountdown();
+        }
+        touchEat = true;
+      } else if (fxOn && !callOn) {
         // 目的地结算前 600ms 防到达瞬间触屏误触
         if (!fxWp && (now - fxAt < 600)) {
+          touchEat = true;
+        } else if (!fxWp && cx0 >= CX - 122 && cx0 <= CX + 122 && cy0 >= 344 && cy0 <= 406) {
+          // 阶段二：点击 Arrived 底部「记住车位 · 寻车信标」按钮 -> 通知手机记车位并启动 5s 息屏倒计时
+          pkBeaconTriggerFromArrived();
           touchEat = true;
         } else {
           stopArriveFx();

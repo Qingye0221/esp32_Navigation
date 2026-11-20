@@ -155,6 +155,22 @@ object CallWatcher {
                 val pct = p.getOrNull(2)?.toIntOrNull() ?: return
                 main.post { MapFeeder.setUserZoom(pct / 100.0) }
             }
+            "PK_MARK" -> {
+                val maxMin = p.getOrNull(2)?.toIntOrNull() ?: 360
+                main.post {
+                    val c = ctx ?: return@post
+                    ParkingDetector.markParkingManually(
+                        context = c,
+                        enableBeacon = true,
+                        beaconMaxMinutes = maxMin,
+                        fromScreenArrived = true
+                    )
+                }
+            }
+            "PK_CANCEL" -> main.post {
+                val c = ctx ?: return@post
+                ParkingDetector.cancelScreenBeaconMark(c)
+            }
         }
     }
 

@@ -664,6 +664,19 @@ object NaviBridge {
                 if (active) addTrip(c.latitude, c.longitude, kmh)                 // v7.9
                 ShareGuide.onLocation(c.latitude, c.longitude)                    // v4.5
                 MapFeeder.onLocation(c.latitude, c.longitude, loc.bearing, kmh)   // v2.0 小地图
+                if (!navigationIsSimulation()) {
+                    val acc = loc.accuracy.coerceAtLeast(0f)
+                    val isOutdoor = acc in 1f..20f
+                    ParkingDetector.onMotionUpdate(
+                        lat = c.latitude,
+                        lng = c.longitude,
+                        speedKmh = kmh,
+                        accuracyM = acc,
+                        isGpsOutdoor = isOutdoor,
+                        navActive = hasActiveNavigation(),
+                        remainMeters = uiRemainM
+                    )
+                }
             }
             val m = "#v,$kmh"
             if (m != lastSpeedMsg) {

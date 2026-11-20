@@ -306,5 +306,21 @@ void drawArriveFx(unsigned long t) {
     drawMinimalSettlement(t);
   }
 
+  // 阶段二：底部统一叠绘「记住车位 · 寻车信标」胶囊按钮（免掏手机一键记车位并倒计时息屏）
+  {
+    const int bw = 236, bh = 46;
+    const int bx = CX - bw / 2;
+    const int by = 350;
+    drawTranslucentRoundRect(bx, by, bw, bh, 23, 0x0250, 235);
+    gfx->drawRoundRect(bx, by, bw, bh, 23, 0x3E7F);
+    aaDisc((float)(bx + 26), (float)(by + bh / 2), 13.0f, 0x03BF);
+    drawAaString((float)(bx + 26), (float)(by + bh / 2), "P", 1.5f, 0.9f, 10.0f, C_WHITE, true);
+    if (isChineseLang) {
+      drawTextUTF8(bx + 46, by + 30, "记住车位 · 寻车信标", C_WHITE);
+    } else {
+      drawAaString((float)(bx + 132), (float)(by + bh / 2), "SAVE SPOT & BEACON", 1.15f, 0.75f, 8.2f, C_WHITE, true);
+    }
+  }
+
   needFlush = true;
 }

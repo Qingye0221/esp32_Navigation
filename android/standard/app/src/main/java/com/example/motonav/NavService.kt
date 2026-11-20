@@ -46,9 +46,16 @@ class NavService : Service() {
             context.stopService(Intent(context, NavService::class.java))
         }
 
+        private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        @Volatile private var parkingGraceActive = false
+        private var parkingGraceReleaseRunnable: Runnable? = null
+
         fun updateBackgroundLocation(connected: Boolean) {
             val s = instance ?: return
             if (connected) {
+                cancelParkingGraceTimer()
+                parkingGraceActive = false
+                ParkingDetector.onBleConnectionChanged(true)
                 if (s.bgLocationClient == null) {
                     try {
                         val client = com.amap.api.location.AMapLocationClient(s.applicationContext)
@@ -60,13 +67,45 @@ class NavService : Service() {
                     }
                 }
             } else {
-                try {
-                    s.bgLocationClient?.disableBackgroundLocation(true)
-                    s.bgLocationClient?.onDestroy()
-                } catch (_: Throwable) {}
-                s.bgLocationClient = null
-                android.util.Log.i("NavService", "AMap background location disabled")
+                val needGrace = ParkingDetector.onBleConnectionChanged(false)
+                if (needGrace) {
+                    parkingGraceActive = true
+                    // 临时持有 25 秒 WakeLock 保障锁屏后台完成地库停车位采样
+                    try { s.wakeLock?.acquire(25_000L) } catch (_: Exception) {}
+                    cancelParkingGraceTimer()
+                    val r = Runnable { releaseParkingGraceWindow() }
+                    parkingGraceReleaseRunnable = r
+                    mainHandler.postDelayed(r, 24_000L)
+                    android.util.Log.i("NavService", "Holding background location 24s grace window for indoor parking")
+                    return
+                }
+                disableBackgroundLocationNow(s)
             }
+        }
+
+        fun releaseParkingGraceWindow() {
+            cancelParkingGraceTimer()
+            if (!parkingGraceActive) return
+            parkingGraceActive = false
+            val s = instance ?: return
+            if (!BleLink.isConnected) {
+                disableBackgroundLocationNow(s)
+            }
+            updateWakeLock()
+        }
+
+        private fun cancelParkingGraceTimer() {
+            parkingGraceReleaseRunnable?.let { mainHandler.removeCallbacks(it) }
+            parkingGraceReleaseRunnable = null
+        }
+
+        private fun disableBackgroundLocationNow(s: NavService) {
+            try {
+                s.bgLocationClient?.disableBackgroundLocation(true)
+                s.bgLocationClient?.onDestroy()
+            } catch (_: Throwable) {}
+            s.bgLocationClient = null
+            android.util.Log.i("NavService", "AMap background location disabled")
         }
     }
 
@@ -107,6 +146,7 @@ class NavService : Service() {
         updateWakeLock()
 
         BleLink.startAuto(this)
+        ParkingDetector.init(this)        // 阶段二：地库自动停车记忆与气压计辅助
         Brightness.start(this)
         MapFeeder.load(this)              // v2.0 读取小地图开关
         AmapCaptureHost.serviceStarted(this)
@@ -124,8 +164,11 @@ class NavService : Service() {
         AmapCaptureHost.serviceStopped(this)
         running = false
         CallWatcher.stop()                // v5.0
+        ParkingDetector.stop()            // 阶段二：停止停车检测与气压计
         Brightness.stop()
         BleLink.stopAuto()
+        cancelParkingGraceTimer()
+        parkingGraceActive = false
         updateBackgroundLocation(false)
         try { wakeLock?.release() } catch (_: Exception) {}
         wakeLock = null; instance = null

@@ -120,7 +120,19 @@ object BleLink {
 
     @Volatile var mtu = 23
     @Volatile var onConnectionChanged: ((Boolean) -> Unit)? = null
+    @Volatile var onRssiRead: ((Int) -> Unit)? = null
     @Volatile private var ready = false        // 服务和大数据包都协商好了，可以发送
+
+    fun serviceUuid(): UUID = SERVICE_UUID
+
+    fun connectedAddress(): String = try {
+        gatt?.device?.address ?: lastAddr()
+    } catch (_: Exception) { lastAddr() }
+
+    fun requestRemoteRssi(): Boolean = try {
+        val g = gatt
+        if (ready && g != null) g.readRemoteRssi() else false
+    } catch (_: Exception) { false }
 
     // ---- 发送队列（v2 多通道优先级与并发流水线） ----
     private class Out(val key: String?, var data: ByteArray)
@@ -563,6 +575,12 @@ object BleLink {
             }
             synchronized(lock) { if (inFlight > 0) inFlight-- }
             pump()
+        }
+
+        override fun onReadRemoteRssi(g: BluetoothGatt, rssi: Int, status: Int) = onCurrent(g) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                onRssiRead?.invoke(rssi)
+            }
         }
     }
 
