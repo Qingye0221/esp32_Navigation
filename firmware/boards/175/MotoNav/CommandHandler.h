@@ -223,6 +223,71 @@ void handleText(const String &m) {
         destItems[id].commuteAt = millis();
       }
       navDirty = true;
+      if (page == 0 && !inNav) drawWaiting(waitSt);
+    }
+    return;
+  }
+  if (m.startsWith("#RP,")) {
+    String sub = m.substring(4);
+    if (sub.startsWith("CLR,")) {
+      String rest = sub.substring(4);
+      int c1 = rest.indexOf(',');
+      String dname = (c1 > 0) ? rest.substring(0, c1) : rest;
+      int mode = (c1 > 0) ? rest.substring(c1 + 1).toInt() : 0;
+      strncpy(rpDestName, dname.c_str(), sizeof(rpDestName) - 1);
+      rpDestName[sizeof(rpDestName) - 1] = 0;
+      rpMode = mode;
+      rpOptCount = 0;
+      rpSelected = 0;
+      rpErrMsg[0] = 0;
+      routePickerErrUntil = 0;
+      routePickerOpen = true;
+      routePickerLoading = true;
+      destSheetOpen = false;
+      navStarUntil = 0;
+      navDirty = true;
+      if (page == 0 && !inNav) drawWaiting(waitSt);
+    } else if (sub.startsWith("ADD,")) {
+      // #RP,ADD,idx,tag,mins,dist,lights,traffic
+      String rest = sub.substring(4);
+      int p1 = rest.indexOf(',');
+      int p2 = (p1 > 0) ? rest.indexOf(',', p1 + 1) : -1;
+      int p3 = (p2 > 0) ? rest.indexOf(',', p2 + 1) : -1;
+      int p4 = (p3 > 0) ? rest.indexOf(',', p3 + 1) : -1;
+      int p5 = (p4 > 0) ? rest.indexOf(',', p4 + 1) : -1;
+      if (p1 > 0 && p2 > p1 && p3 > p2 && p4 > p3 && p5 > p4) {
+        int idx = rest.substring(0, p1).toInt();
+        if (idx >= 0 && idx < MAX_ROUTE_PLAN_OPTS) {
+          String tag = rest.substring(p1 + 1, p2);
+          int mins = rest.substring(p2 + 1, p3).toInt();
+          String dist = rest.substring(p3 + 1, p4);
+          int lights = rest.substring(p4 + 1, p5).toInt();
+          int traf = rest.substring(p5 + 1).toInt();
+          strncpy(rpOpts[idx].tag, tag.c_str(), sizeof(rpOpts[idx].tag) - 1);
+          rpOpts[idx].tag[sizeof(rpOpts[idx].tag) - 1] = 0;
+          rpOpts[idx].mins = mins;
+          strncpy(rpOpts[idx].dist, dist.c_str(), sizeof(rpOpts[idx].dist) - 1);
+          rpOpts[idx].dist[sizeof(rpOpts[idx].dist) - 1] = 0;
+          rpOpts[idx].lights = lights;
+          rpOpts[idx].trafficStatus = traf;
+          if (idx + 1 > rpOptCount) rpOptCount = idx + 1;
+        }
+      }
+    } else if (sub.startsWith("SHOW")) {
+      routePickerLoading = false;
+      routePickerOpen = true;
+      rpSelected = 0;
+      navDirty = true;
+      if (page == 0 && !inNav) drawWaiting(waitSt);
+    } else if (sub.startsWith("ERR,")) {
+      String err = sub.substring(4);
+      strncpy(rpErrMsg, err.c_str(), sizeof(rpErrMsg) - 1);
+      rpErrMsg[sizeof(rpErrMsg) - 1] = 0;
+      routePickerLoading = false;
+      routePickerOpen = true;
+      routePickerErrUntil = millis() + 3000;
+      navDirty = true;
+      if (page == 0 && !inNav) drawWaiting(waitSt);
     }
     return;
   }

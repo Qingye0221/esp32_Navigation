@@ -294,7 +294,7 @@ void drawLeanMeter() {
     drawAaString(CX_CENTER, BOT_Y + BOT_H * 0.5f, statBuf, 1.90f * K, 1.10f * K, 12.0f * K, C_WHITE, true);
   }
 
-  drawAaString(CX_CENTER, LCD_HEIGHT - 42.0f * K, "DOUBLE TAP RESET · HOLD CALIB", 1.40f * K, 0.80f * K, 8.8f * K, 0x528A, true);
+  drawAaString(CX_CENTER, LCD_HEIGHT - 42.0f * K, "HOLD TO CALIB & RESET", 1.45f * K, 0.85f * K, 9.0f * K, 0x528A, true);
 
   drawAlongPoiBanner();
   drawPageDots();
@@ -302,19 +302,6 @@ void drawLeanMeter() {
 }
 
 void leanMeterTap(int x, int y) {
-  if (dragging || page != 3 || callOn || pairOn) return;
-  float dx = x - CX, dy = y - CX;
-  touchVectorToCanvas(dx, dy);
-  x = (int)lroundf(CX + dx); y = (int)lroundf(CX + dy);
-
-  static unsigned long lastTapAt = 0;
-  unsigned long now = millis();
-  bool isDouble = (now - lastTapAt < 400);
-  lastTapAt = now;
-
-  if (isDouble) {
-    CompanionMode::startVibration(40, 20);
-    LeanAngleMeter::resetStats();
-    leanDirty = true;
-  }
+  (void)x;
+  (void)y;
 }

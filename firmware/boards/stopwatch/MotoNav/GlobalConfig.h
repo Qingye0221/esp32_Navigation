@@ -264,6 +264,28 @@ void saveMapZoomIfDue() {
   pr.end();
 }
 
+// 导航/巡航态轻触空白处唤起的底部五角星按钮显示截止时间
+unsigned long navStarUntil = 0;
+
+// 圆屏端独立选路数据结构（支持多条候选路线在圆屏直接选择并启动导航）
+struct RoutePlanOption {
+  char tag[24];
+  int mins;
+  char dist[16];
+  int lights;
+  int trafficStatus; // 0:畅通(绿), 1:缓行(黄), 2:拥堵(红)
+};
+#define MAX_ROUTE_PLAN_OPTS 3
+RoutePlanOption rpOpts[MAX_ROUTE_PLAN_OPTS];
+int rpOptCount = 0;
+int rpSelected = 0;
+int rpMode = 0; // 0:驾车 1:骑行 2:步行
+char rpDestName[48] = {0};
+char rpErrMsg[48] = {0};
+bool routePickerOpen = false;
+bool routePickerLoading = false;
+unsigned long routePickerErrUntil = 0;
+
 // 跨模块前置声明
 void drawLanesAt(float centerX, float y0, float maxW, float maxH);
 void touchVectorToCanvas(float &dx, float &dy);

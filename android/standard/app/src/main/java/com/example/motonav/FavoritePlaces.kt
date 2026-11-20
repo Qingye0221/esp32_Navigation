@@ -36,11 +36,11 @@ object FavoritePlaces {
         val existing = find(c,lat,lng)
         require(existing != null || old.size < 50) { "最多保存 50 个常用目的地，请先删除不用的地点" }
         write(c,listOf(FavoritePlace(existing?.id ?: UUID.randomUUID().toString(),name.trim().take(60),addr.take(300),lat,lng)) + old.filter { it.id != existing?.id })
-        CallWatcher.syncDestinations()
+        CallWatcher.syncDestinations(c)
     }
     @Synchronized fun remove(c: Context, id: String) {
         write(c,load(c).filter { it.id != id })
-        CallWatcher.syncDestinations()
+        CallWatcher.syncDestinations(c)
     }
 }
 

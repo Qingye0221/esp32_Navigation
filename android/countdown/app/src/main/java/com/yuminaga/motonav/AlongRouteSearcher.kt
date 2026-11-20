@@ -16,8 +16,9 @@ import com.amap.api.services.routepoisearch.RoutePOISearchResult
 import kotlin.math.roundToInt
 
 /**
- * 阶段一特性：一键沿途顺路搜 (加油站 / 维修点 / 服务区)
- * 纯端侧闭环、零云端服务器依赖，利用高德官方 RoutePOISearch 接口
+ * 阶段一特性：一键沿途顺路搜 (加油站 / 服务区 / 维修点 / 洗手间)
+ * 纯端侧闭环、零云端服务器依赖，利用高德官方 RoutePOISearch 接口；
+ * 导航中确认即作为途经点改线，巡航/待机中确认即通过圆屏选路规划直接导航。
  */
 object AlongRouteSearcher {
     private val handler = Handler(Looper.getMainLooper())
@@ -26,37 +27,51 @@ object AlongRouteSearcher {
     @Volatile var candidatePoint: NaviLatLng? = null
     @Volatile var candidateDetourM: Int = 0
     @Volatile var candidateDistM: Int = 0
+    @Volatile var candidateCat: String = "GAS"
     @Volatile var isSearching: Boolean = false
 
+    private data class CatSpec(
+        val code: String,
+        val label: String,
+        val routeType: RoutePOISearch.RoutePOISearchType,
+        val keyword: String,
+        val typeCode: String
+    )
+
+    private fun specOf(cat: String): CatSpec = when (cat.uppercase()) {
+        "SVC" -> CatSpec("SVC", "服务区", RoutePOISearch.RoutePOISearchType.TypeServiceArea, "服务区", "180300")
+        "REP" -> CatSpec("REP", "维修点", RoutePOISearch.RoutePOISearchType.TypeMaintenanceStation, "汽车维修", "030000")
+        "WC"  -> CatSpec("WC",  "洗手间", RoutePOISearch.RoutePOISearchType.TypeToilet, "公共厕所", "200300")
+        else  -> CatSpec("GAS", "加油站", RoutePOISearch.RoutePOISearchType.TypeGasStation, "加油站", "010100")
+    }
+
+    fun searchGas(context: Context) = search(context, "GAS")
+
     /**
-     * 发起顺路加油站搜索
+     * 发起顺路/周边设施搜索（GAS / SVC / REP / WC）
      */
-    fun searchGas(context: Context) {
+    fun search(context: Context, category: String) {
         if (isSearching) return
         isSearching = true
+        val spec = specOf(category)
+        candidateCat = spec.code
 
         val navi = try { AMapNavi.getInstance(context.applicationContext) } catch (_: Throwable) { null }
-        val path = navi?.naviPath
+        val path = if (!NaviBridge.cruising) navi?.naviPath else null
         val coords = path?.coordList
 
-        // 1. 如果在导航中且拥有当前路线坐标串：使用沿途搜索 RoutePOISearch
         if (coords != null && coords.size >= 2) {
-            searchAlongRoute(context, coords, navi)
+            searchAlongRoute(context, coords, spec)
         } else {
-            // 2. 如果未在导航中：按当前 GPS 定位周边 3000 米普通 POI 搜索
-            searchNearbyGas(context)
+            searchNearby(context, spec)
         }
     }
 
-    /**
-     * 基于路线折线点的前方沿途检索 (偏离 <= 500m)
-     */
-    private fun searchAlongRoute(context: Context, coords: List<NaviLatLng>, navi: AMapNavi?) {
+    private fun searchAlongRoute(context: Context, coords: List<NaviLatLng>, spec: CatSpec) {
         val pos = NaviBridge.currentPosition()
         val myLat = pos[0]
         val myLng = pos[1]
 
-        // 找到距离当前车头最近的路线点索引
         var nearestIdx = 0
         var minDistSq = Double.MAX_VALUE
         if (!myLat.isNaN() && !myLng.isNaN()) {
@@ -72,7 +87,6 @@ object AlongRouteSearcher {
             }
         }
 
-        // 从当前车头前方截取接下来约 25km 的路段坐标 (最多 60 个点以满足高德推荐 <= 100 点限制)
         val polyline = ArrayList<LatLonPoint>()
         val total = coords.size
         val start = nearestIdx.coerceIn(0, total - 1)
@@ -91,11 +105,8 @@ object AlongRouteSearcher {
         }
 
         try {
-            val query = RoutePOISearchQuery(
-                polyline,
-                RoutePOISearch.RoutePOISearchType.TypeGasStation,
-                500 // 偏离范围 <= 500 米
-            )
+            val rangeM = if (spec.code == "SVC") 1000 else 500
+            val query = RoutePOISearchQuery(polyline, spec.routeType, rangeM)
             val search = RoutePOISearch(context.applicationContext, query)
             search.setPoiSearchListener(object : RoutePOISearch.OnRoutePOISearchListener {
                 override fun onRoutePoiSearched(res: RoutePOISearchResult?, errCode: Int) {
@@ -103,45 +114,43 @@ object AlongRouteSearcher {
                         isSearching = false
                         val items = res?.routePois
                         if (errCode == 1000 && !items.isNullOrEmpty()) {
-                            // 挑选顺路偏离最小、距离适中的加油站
                             val best = items.minByOrNull { it.distance } ?: items.first()
                             onCandidateFound(
-                                name = best.title ?: "顺路加油站",
+                                spec = spec,
+                                name = best.title ?: "顺路${spec.label}",
                                 lat = best.point.latitude,
                                 lng = best.point.longitude,
                                 detourM = best.distance.roundToInt().coerceAtLeast(0),
                                 distM = best.duration.roundToInt().coerceAtLeast(100)
                             )
                         } else {
-                            onCandidateNotFound()
+                            onCandidateNotFound(spec)
                         }
                     }
                 }
             })
             search.searchRoutePOIAsyn()
-        } catch (t: Throwable) {
+        } catch (_: Throwable) {
             isSearching = false
-            onCandidateNotFound()
+            onCandidateNotFound(spec)
         }
     }
 
-    /**
-     * 周边普通 POI 加油站搜索 (备用方案)
-     */
-    private fun searchNearbyGas(context: Context) {
+    private fun searchNearby(context: Context, spec: CatSpec) {
         val pos = NaviBridge.currentPosition()
         val myLat = pos[0]
         val myLng = pos[1]
         if (myLat.isNaN() || myLng.isNaN()) {
             isSearching = false
-            onCandidateNotFound()
+            onCandidateNotFound(spec)
             return
         }
         try {
-            val query = PoiSearch.Query("加油站", "010100", "")
+            val query = PoiSearch.Query(spec.keyword, spec.typeCode, "")
             query.pageSize = 5
             val search = PoiSearch(context.applicationContext, query)
-            search.bound = PoiSearch.SearchBound(LatLonPoint(myLat, myLng), 4000)
+            val radius = if (spec.code == "SVC") 15000 else 5000
+            search.bound = PoiSearch.SearchBound(LatLonPoint(myLat, myLng), radius)
             search.setOnPoiSearchListener(object : PoiSearch.OnPoiSearchListener {
                 override fun onPoiSearched(res: PoiResult?, errCode: Int) {
                     handler.post {
@@ -155,14 +164,15 @@ object AlongRouteSearcher {
                             )
                             val dist = resDist[0].roundToInt()
                             onCandidateFound(
-                                name = best.title ?: "加油站",
+                                spec = spec,
+                                name = best.title ?: spec.label,
                                 lat = best.latLonPoint.latitude,
                                 lng = best.latLonPoint.longitude,
                                 detourM = 0,
                                 distM = dist
                             )
                         } else {
-                            onCandidateNotFound()
+                            onCandidateNotFound(spec)
                         }
                     }
                 }
@@ -171,64 +181,69 @@ object AlongRouteSearcher {
             search.searchPOIAsyn()
         } catch (_: Throwable) {
             isSearching = false
-            onCandidateNotFound()
+            onCandidateNotFound(spec)
         }
     }
 
-    private fun onCandidateFound(name: String, lat: Double, lng: Double, detourM: Int, distM: Int) {
+    private fun onCandidateFound(spec: CatSpec, name: String, lat: Double, lng: Double, detourM: Int, distM: Int) {
         candidateName = name
         candidatePoint = NaviLatLng(lat, lng)
         candidateDetourM = detourM
         candidateDistM = distM
 
-        // 下发给圆屏：#QA,1,名称,偏离米数,沿途米数
         val cleanName = name.replace(",", " ").trim()
-        val msg = "#QA,1,$cleanName,$detourM,$distM"
-        BleLink.send(msg)
+        BleLink.send("#QA,1,$cleanName,$detourM,$distM")
 
-        NaviVoice.onNaviText("已找到顺路加油站：$name，顺路偏离 $detourM 米", false)
+        val speak = if (detourM > 0) "已找到顺路${spec.label}：$name，偏离 $detourM 米"
+        else "已找到附近${spec.label}：$name，距离 $distM 米"
+        NaviVoice.onNaviText(speak, false)
     }
 
-    private fun onCandidateNotFound() {
+    private fun onCandidateNotFound(spec: CatSpec) {
         candidateName = ""
         candidatePoint = null
         candidateDetourM = 0
         candidateDistM = 0
-        BleLink.send("#QA,0,未找到顺路加油站,0,0")
-        NaviVoice.onNaviText("前方沿途暂未发现偏离 500 米以内的顺路加油站", false)
+        BleLink.send("#QA,0,未找到顺路${spec.label},0,0")
+        NaviVoice.onNaviText("附近暂未发现可用的${spec.label}", false)
     }
 
     /**
-     * 用户在圆屏端确认添加途径点改线 (#QC,1)
+     * 用户在圆屏端确认候选点 (#QC,1)：
+     * 导航中 -> 作为途经点插入重算路线；
+     * 巡航/待机中 -> 直接作为目的地进入圆屏选路规划。
      */
     fun applyCandidateWayPoint(context: Context): Boolean {
         val pt = candidatePoint ?: return false
         val name = candidateName
         val navi = try { AMapNavi.getInstance(context.applicationContext) } catch (_: Throwable) { null }
-            ?: return false
+        val path = if (!NaviBridge.cruising) navi?.naviPath else null
+        val endPt = path?.endPoint
 
-        val path = navi.naviPath
-        val endPt = path?.endPoint ?: return false
+        if (navi != null && endPt != null && NaviBridge.directRouteMode == LocalRouting.DRIVE) {
+            val vias = ArrayList<NaviLatLng>()
+            path.wayPoint?.let { vias.addAll(it) }
+            vias.add(pt)
 
-        // 现有的途径点列表加上新加油站
-        val vias = ArrayList<NaviLatLng>()
-        path.wayPoint?.let { vias.addAll(it) }
-        vias.add(pt)
+            val ok = try {
+                val ends = ArrayList<NaviLatLng>()
+                ends.add(endPt)
+                navi.calculateDriveRoute(ends, vias, 12)
+            } catch (_: Throwable) {
+                false
+            }
 
-        // 重新发起路线规划 (以当前位置或原起点规划，包含途经点，策略 12 默认速度优先)
-        val ok = try {
-            val ends = ArrayList<NaviLatLng>()
-            ends.add(endPt)
-            navi.calculateDriveRoute(ends, vias, 12)
-        } catch (_: Throwable) {
-            false
-        }
-
-        if (ok) {
-            NaviVoice.onNaviText("已将 $name 添加为途径点，正在重新规划路线", false)
+            if (ok) {
+                NaviVoice.onNaviText("已将 $name 添加为途经点，正在重新规划路线", false)
+                candidatePoint = null
+                candidateName = ""
+            }
+            return ok
+        } else {
             candidatePoint = null
             candidateName = ""
+            ScreenRoutePlanner.planForScreen(context, name, "", pt.latitude, pt.longitude)
+            return true
         }
-        return ok
     }
 }

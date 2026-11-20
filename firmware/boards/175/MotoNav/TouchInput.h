@@ -384,19 +384,22 @@ void touchPoll() {
       }
     }
 
-    // 倾角仪表页面：校准按钮长按 1.5 秒判定，彻底杜绝骑行轻碰误触
-    if (page == 3 && touchDown) {
-      float tdx = touchX0 - CX, tdy = touchY0 - CX;
-      touchVectorToCanvas(tdx, tdy);
-      int cy0 = (int)lroundf(CX + tdy);
-      int cx0 = (int)lroundf(CX + tdx);
-      if (cy0 >= 340 && abs(cx0 - CX) <= 100) {
-        if (now - touchHoldAt >= 1500 && !calibTriggered) {
+    // 倾角仪表页面：长按屏幕任意位置 1.2 秒同时实现 G 值表与倾角仪复位及水平校准
+    if (page == 3 && touchDown && !callOn && !pairOn) {
+      if (abs(touchX1 - touchX0) < 35 && abs(touchY1 - touchY0) < 35) {
+        if (now - touchHoldAt >= 1200 && !calibTriggered) {
           calibTriggered = true;
-          LeanAngleMeter::calibrateZero();
+          LeanAngleMeter::resetStats();
+          if (!LeanAngleMeter::calibrateZero()) {
+            LeanAngleMeter::leanAngle = 0.0f;
+            LeanAngleMeter::calibSuccessUntil = millis() + 2000;
+          }
+          CompanionMode::startVibration(90, 40);
           #ifdef M5PM1_ADDR
           M5PM1.setVibration(120);
           #endif
+          touchEat = true;
+          dragAbort();
           leanDirty = true;
         }
       }
@@ -422,7 +425,7 @@ void touchPoll() {
       }
     }
 
-    if (callOn || pairOn || touchEat || fxOn || mapZoomActive) dragAbort();
+    if (callOn || pairOn || touchEat || fxOn || mapZoomActive || destSheetOpen || routePickerOpen) dragAbort();
     else {
       dragMove(touchX1 - touchX0, touchY1 - touchY0, now);
     }
@@ -544,9 +547,31 @@ void touchPoll() {
       int canvasX = (int)lroundf(CX + tdx);
       int canvasY = (int)lroundf(CX + tdy);
 
+      // 1. 最高优先级：圆屏独立选路浮层 / 收藏与沿途搜抽屉 / 沿途搜确认卡片
+      if (routePickerOpen && routePickerTap(canvasX, canvasY)) { dragAbort(); touchEat = false; return; }
+      if (destSheetOpen && destSheetTap(canvasX, canvasY)) { dragAbort(); touchEat = false; return; }
       if (alongPoiTap(canvasX, canvasY)) { dragAbort(); touchEat = false; return; }
-      if (page == 0 && inNav && pressDuration >= 1200 && abs(touchX1 - touchX0) < 35 && abs(touchY1 - touchY0) < 35) {
-        triggerAlongGasSearch();
+
+      // 2. 导航中或巡航模式轻触空白处：底部浮现五角星按钮；点击五角星展开收藏与沿途查找抽屉
+      if (page == 0 && inNav && abs(touchX1 - touchX0) < 36 && abs(touchY1 - touchY0) < 36) {
+        if (now < navStarUntil) {
+          int sdx = canvasX - CX;
+          int sdy = canvasY - 388;
+          if (sdx * sdx + sdy * sdy <= 42 * 42) {
+            CompanionMode::startVibration(55, 22);
+            destSheetOpen = true;
+            navStarUntil = 0;
+            if (bleConnected) pendingEvt = "T,DEST_Q";
+            navDirty = true;
+            dragAbort();
+            touchEat = false;
+            return;
+          }
+        }
+        // 轻触空白处：唤起/延长底部五角星按钮显示 5.5 秒
+        navStarUntil = now + 5500;
+        navDirty = true;
+        CompanionMode::startVibration(35, 14);
         dragAbort();
         touchEat = false;
         return;
@@ -555,7 +580,6 @@ void touchPoll() {
       if (page == 2 && abs(touchX1 - touchX0) < 36 && abs(touchY1 - touchY0) < 36) { musicTap(canvasX, canvasY); CompanionMode::startVibration(65, 22); }
       if (page == 0 && !inNav && abs(touchX1 - touchX0) < 36 && abs(touchY1 - touchY0) < 36) { waitingScreenTap(canvasX, canvasY); CompanionMode::startVibration(65, 22); }
       if (page == 1 && abs(touchX1 - touchX0) < 36 && abs(touchY1 - touchY0) < 36) { settingsPageTap(canvasX, canvasY); CompanionMode::startVibration(65, 22); }
-      if (page == 3 && abs(touchX1 - touchX0) < 36 && abs(touchY1 - touchY0) < 36) { leanMeterTap(canvasX, canvasY); CompanionMode::startVibration(65, 22); }
       dragEnd();
     }
     touchEat = false;

@@ -138,6 +138,11 @@ object CallWatcher {
                 val idx = p.getOrNull(2)?.toIntOrNull() ?: 0
                 main.post { navigateDestination(idx) }
             }
+            "RP_GO" -> {
+                val idx = p.getOrNull(2)?.toIntOrNull() ?: 0
+                main.post { ctx?.let { ScreenRoutePlanner.startSelectedRoute(it, idx) } }
+            }
+            "RP_CANCEL" -> main.post { ScreenRoutePlanner.cancel() }
             "SET_THEME" -> {
                 val t = p.getOrNull(2)?.toIntOrNull() ?: 0
                 main.post { MapFeeder.setTheme(t) }
@@ -157,39 +162,29 @@ object CallWatcher {
         return text.trim().replace(",", " ").replace("\n", " ").take(28)
     }
 
-    fun syncDestinations() {
-        val c = ctx ?: return
+    fun syncDestinations(context: Context? = null) {
+        val c = context?.applicationContext ?: ctx ?: return
+        if (ctx == null) ctx = c
         if (!BleLink.isConnected) return
         val isZh = java.util.Locale.getDefault().language.startsWith("zh")
         BleLink.send(if (isZh) "#LANG,zh" else "#LANG,en")
         BleLink.send("#DEST,CLR")
         val favs = try { FavoritePlaces.load(c) } catch (_: Exception) { emptyList() }
-        for (f in favs.take(6)) {
+        for ((idx, f) in favs.take(6).withIndex()) {
             val dispName = formatNameForScreen(f.name)
             val dispAddr = formatNameForScreen(f.addr)
             BleLink.send("#DEST,ADD,0,$dispName,$dispAddr")
+            if (idx < 2) {
+                CommuteTrafficWatcher.queryCommute(c, idx, f.lat, f.lng)
+            }
         }
     }
 
     private fun navigateDestination(idx: Int) {
         val c = ctx ?: return
         val favs = try { FavoritePlaces.load(c) } catch (_: Exception) { emptyList() }
-        val history = try { NavHistory.load(c) } catch (_: Exception) { emptyList() }
-        val all = favs.map { Triple(it.name, it.addr, Pair(it.lat, it.lng)) } +
-                  history.map { Triple(it.name, it.addr, Pair(it.lat, it.lng)) }
-        val target = all.getOrNull(idx) ?: return
-        try {
-            val intent = Intent(c, RoutePlanActivity::class.java).apply {
-                putExtra("name", target.first)
-                putExtra("addr", target.second)
-                putExtra("lat", target.third.first)
-                putExtra("lng", target.third.second)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            }
-            c.startActivity(intent)
-        } catch (e: Exception) {
-            android.util.Log.e("CallWatcher", "Failed to start route plan: ${e.message}")
-        }
+        val target = favs.take(6).getOrNull(idx) ?: return
+        ScreenRoutePlanner.planForScreen(c, target.name, target.addr, target.lat, target.lng)
     }
 
     private fun answer() {

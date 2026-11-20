@@ -126,6 +126,10 @@ void drawNavFrame() {
     drawStatus();
     drawSpeedBlock(over);
     printCentered("CRUISE", CX, 300, 4, C_CYAN);
+    drawAlongPoiBanner(t);
+    drawNavStarButton(t);
+    if (destSheetOpen) drawDestinationsSheet();
+    if (routePickerOpen) drawRoutePickerSheet();
     needFlush = true;
     return;
   }
@@ -167,6 +171,10 @@ void drawNavFrame() {
   drawTextImg(1, BOTTOM_Y, 0x99);                      // v1.7.3：常驻显示
   drawNavHints(128);                                    // v5.0
   drawTrafficLightLab(millis());                        // 红绿灯竖排卡片
+  drawAlongPoiBanner(t);
+  drawNavStarButton(t);
+  if (destSheetOpen) drawDestinationsSheet();
+  if (routePickerOpen) drawRoutePickerSheet();
   needFlush = true;
 }
 

@@ -1025,21 +1025,37 @@ void routePt(float u, float &x, float &y) {
 }
 
 // 找车在路线上的位置：平时只在当前位置附近（往回 30 米、往前 300 米）找，
-// 这样掉头、绕回同一条路时不会跳到路线后面去；还没对上时才搜整条路线（最多每秒一次）
+// 这样掉头、绕回同一条路时不会跳到路线后面去；
+// 当超出小窗口时（长途高速行驶、隧道进出、偏航重新汇入），每秒进行向前恢复纠偏，防止 routeProg 永久死锁
 void updateRouteProgress(float cx, float cy) {
   if (routeN < 2) return;
-  int k0, k1;
   if (routeProg < 0) {
     if (millis() - routeSearchAt < 1000 && routeSearchAt) return;
     routeSearchAt = millis();
-    k0 = 0; k1 = routeN - 2;
-  } else {
-    int base = min((int)routeProg, routeN - 2);
-    float acc = 0;
-    k0 = base; while (k0 > 0 && acc < 30) { acc += segLen(k0 - 1); k0--; }
-    acc = 0;
-    k1 = base; while (k1 < routeN - 2 && acc < 300) { acc += segLen(k1); k1++; }
+    float best = 1e18f, bestU = -1;
+    for (int k = 0; k <= routeN - 2; k++) {
+      float ax = routeX[k], ay = routeY[k];
+      float vx = routeX[k + 1] - ax, vy = routeY[k + 1] - ay;
+      float L2 = vx * vx + vy * vy;
+      float t = L2 > 0 ? ((cx - ax) * vx + (cy - ay) * vy) / L2 : 0;
+      t = constrain(t, 0.0f, 1.0f);
+      float ex = ax + vx * t - cx, ey = ay + vy * t - cy;
+      float d2 = ex * ex + ey * ey;
+      if (d2 < best) { best = d2; bestU = k + t; }
+    }
+    if (best <= 60.0f * 60.0f) {
+      routeProg = bestU;
+    }
+    return;
   }
+
+  // 1. 优先在局部小窗口搜索（后退 30 米，前进 300 米）
+  int base = min((int)routeProg, routeN - 2);
+  float acc = 0;
+  int k0 = base; while (k0 > 0 && acc < 30) { acc += segLen(k0 - 1); k0--; }
+  acc = 0;
+  int k1 = base; while (k1 < routeN - 2 && acc < 300) { acc += segLen(k1); k1++; }
+
   float best = 1e18f, bestU = -1;
   for (int k = k0; k <= k1; k++) {
     float ax = routeX[k], ay = routeY[k];
@@ -1051,8 +1067,47 @@ void updateRouteProgress(float cx, float cy) {
     float d2 = ex * ex + ey * ey;
     if (d2 < best) { best = d2; bestU = k + t; }
   }
-  if (best > 50.0f * 50.0f) return;                   // 离路线超过 50 米（偏航中）：先不动
-  routeProg = bestU;
+
+  if (best <= 50.0f * 50.0f) {
+    routeProg = bestU;
+    return;
+  }
+
+  // 2. 小窗口内距离 > 50米：长途高速行驶跳出300米、进出隧道、或偏航后重新进入路线
+  // 限频 1 秒 1 次向前方路线搜索纠偏，防止 routeProg 死锁导致轨迹无法擦除或变灰
+  if (millis() - routeSearchAt >= 1000 || routeSearchAt == 0) {
+    routeSearchAt = millis();
+    float fwdBest = 1e18f, fwdBestU = -1;
+    for (int k = max(0, base - 5); k <= routeN - 2; k++) {
+      float ax = routeX[k], ay = routeY[k];
+      float vx = routeX[k + 1] - ax, vy = routeY[k + 1] - ay;
+      float L2 = vx * vx + vy * vy;
+      float t = L2 > 0 ? ((cx - ax) * vx + (cy - ay) * vy) / L2 : 0;
+      t = constrain(t, 0.0f, 1.0f);
+      float ex = ax + vx * t - cx, ey = ay + vy * t - cy;
+      float d2 = ex * ex + ey * ey;
+      if (d2 < fwdBest) { fwdBest = d2; fwdBestU = k + t; }
+    }
+    if (fwdBest <= 60.0f * 60.0f) {
+      routeProg = fwdBestU;
+      return;
+    }
+    // 前方未找到，兜底检查全线前半段
+    float allBest = 1e18f, allBestU = -1;
+    for (int k = 0; k < max(0, base - 5); k++) {
+      float ax = routeX[k], ay = routeY[k];
+      float vx = routeX[k + 1] - ax, vy = routeY[k + 1] - ay;
+      float L2 = vx * vx + vy * vy;
+      float t = L2 > 0 ? ((cx - ax) * vx + (cy - ay) * vy) / L2 : 0;
+      t = constrain(t, 0.0f, 1.0f);
+      float ex = ax + vx * t - cx, ey = ay + vy * t - cy;
+      float d2 = ex * ex + ey * ey;
+      if (d2 < allBest) { allBest = d2; allBestU = k + t; }
+    }
+    if (allBest <= 60.0f * 60.0f) {
+      routeProg = allBestU;
+    }
+  }
 }
 
 void mapPolyline(const float *xs, const float *ys, int n, float w, uint16_t c, bool caps);
@@ -1892,16 +1947,89 @@ void mapFillPoly(const float *xs, const float *ys, int n, uint16_t c) {
   }
 }
 
-// 车头箭头（白色，深色描边）
-void drawPlayer(float x, float y) {
-  // v3.9 车头箭头缩小到原来的约 70%
-  const float T[4][2] = {{0, -13}, {-10, 10.5f}, {0, 5}, {10, 10.5f}};
-  for (int pass = 0; pass < 2; pass++) {
-    float k = pass == 0 ? 1.35f : 1.0f;
-    uint16_t c = pass == 0 ? C_BLACK : C_WHITE;
-    float yo = pass == 0 ? 1.0f : 0;
-    gfx->fillTriangle(x + T[0][0] * k, y + T[0][1] * k + yo, x + T[1][0] * k, y + T[1][1] * k + yo, x + T[2][0] * k, y + T[2][1] * k + yo, c);
-    gfx->fillTriangle(x + T[0][0] * k, y + T[0][1] * k + yo, x + T[2][0] * k, y + T[2][1] * k + yo, x + T[3][0] * k, y + T[3][1] * k + yo, c);
+// 车头箭头（圆润平滑风格，对齐 App 图标的圆角飞掠箭头，抗锯齿深色描边与白芯）
+void drawPlayer(float cx, float cy) {
+  uint16_t *fb = gfx->getFramebuffer();
+  if (!fb) {
+    const float T[4][2] = {{0, -13}, {-10, 10.5f}, {0, 5}, {10, 10.5f}};
+    for (int pass = 0; pass < 2; pass++) {
+      float k = pass == 0 ? 1.35f : 1.0f;
+      uint16_t c = pass == 0 ? C_BLACK : C_WHITE;
+      float yo = pass == 0 ? 1.0f : 0;
+      gfx->fillTriangle(cx + T[0][0] * k, cy + T[0][1] * k + yo, cx + T[1][0] * k, cy + T[1][1] * k + yo, cx + T[2][0] * k, cy + T[2][1] * k + yo, c);
+      gfx->fillTriangle(cx + T[0][0] * k, cy + T[0][1] * k + yo, cx + T[2][0] * k, cy + T[2][1] * k + yo, cx + T[3][0] * k, cy + T[3][1] * k + yo, c);
+    }
+    return;
+  }
+
+  // App 图标同款圆角飞掠箭头（SDF 圆角多边形渲染，圆润头、圆润翼角、平滑内凹）
+  const float p0x = 0.0f, p0y = -11.5f;
+  const float p1x = 9.5f, p1y = 8.5f;
+  const float p2x = 0.0f, p2y = 3.8f;
+
+  const float v1x = p1x - p0x, v1y = p1y - p0y;
+  const float invL1_2 = 1.0f / (v1x * v1x + v1y * v1y);
+
+  const float v2x = p2x - p1x, v2y = p2y - p1y;
+  const float invL2_2 = 1.0f / (v2x * v2x + v2y * v2y);
+
+  const int x0 = max(0, (int)floorf(cx - 15.0f));
+  const int x1 = min(LCD_WIDTH - 1, (int)ceilf(cx + 15.0f));
+  const int y0 = max(0, (int)floorf(cy - 16.0f));
+  const int y1 = min(LCD_HEIGHT - 1, (int)ceilf(cy + 14.0f));
+
+  // 描边深色 0x1082 (#140E1E，对齐 App 图标背景黑紫色) 与白色内芯
+  const uint16_t c_outline = 0x1082;
+  const uint16_t c_body = C_WHITE;
+
+  for (int y = y0; y <= y1; y++) {
+    float qy = y + 0.5f - cy;
+    uint16_t *row = &fb[y * LCD_WIDTH];
+    for (int x = x0; x <= x1; x++) {
+      float qx = fabsf(x + 0.5f - cx);
+
+      // 1. 点到外掠边缘线段 P0->P1
+      float t1 = (qx * v1x + (qy - p0y) * v1y) * invL1_2;
+      t1 = t1 < 0.0f ? 0.0f : (t1 > 1.0f ? 1.0f : t1);
+      float ex1 = qx - (p0x + t1 * v1x);
+      float ey1 = qy - (p0y + t1 * v1y);
+      float d1_2 = ex1 * ex1 + ey1 * ey1;
+
+      // 2. 点到尾部内凹线段 P1->P2
+      float t2 = ((qx - p1x) * v2x + (qy - p1y) * v2y) * invL2_2;
+      t2 = t2 < 0.0f ? 0.0f : (t2 > 1.0f ? 1.0f : t2);
+      float ex2 = qx - (p1x + t2 * v2x);
+      float ey2 = qy - (p1y + t2 * v2y);
+      float d2_2 = ex2 * ex2 + ey2 * ey2;
+
+      float min_d2 = d1_2 < d2_2 ? d1_2 : d2_2;
+      float min_d = sqrtf(min_d2);
+
+      // 是否在内部
+      bool inside = (qx * v1y - (qy - p0y) * v1x <= 0.0f) && ((qx - p1x) * v2y - (qy - p1y) * v2x <= 0.0f);
+      float d = inside ? -min_d : min_d;
+
+      // 圆润化参数
+      const float r_body = 0.5f;
+      const float r_out = 2.4f;
+
+      if (d > r_out + 0.5f) continue;
+
+      if (d <= r_body - 0.5f) {
+        row[x] = c_body;
+      } else if (d < r_body + 0.5f) {
+        int t = (int)((r_body + 0.5f - d) * 255.0f);
+        row[x] = blend565(c_outline, c_body, t);
+      } else if (d <= r_out - 0.5f) {
+        row[x] = c_outline;
+      } else {
+        float a = (r_out + 0.5f - d);
+        if (a > 0.05f) {
+          int t = (int)(a * 255.0f);
+          row[x] = blend565(row[x], c_outline, t);
+        }
+      }
+    }
   }
 }
 
@@ -3147,7 +3275,10 @@ void drawMapFrame() {
   drawMapZoomSlider(t);                                 // 屏幕右侧边缘半透明缩放滑轨与加减图标
   drawMapZoomHint(t);                                   // 缩放倍率 HUD 浮层
   drawArriveBanner(t);                                  // 到达目的地顶部卡片提示
-  drawAlongPoiBanner(t);                                // 阶段一特性：沿途顺路加油卡片与加途径点改线提示
+  drawAlongPoiBanner(t);                                // 阶段一特性：沿途顺路设施卡片与加途径点改线提示
+  drawNavStarButton(t);                                 // 导航/巡航态轻触空白处浮现的底部五角星按钮
+  if (destSheetOpen) drawDestinationsSheet();           // 收藏地点与沿途快捷服务抽屉
+  if (routePickerOpen) drawRoutePickerSheet();          // 圆屏独立选路浮层
   // v2.9 小地图里不画顶部的蓝牙小圆点（会和 N 标记重叠；能收到地图就说明连着）
   needFlush = true;
   mapFrames++;

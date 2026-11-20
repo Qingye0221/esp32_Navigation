@@ -418,8 +418,9 @@ object BleLink {
             handler.post { NaviBridge.exitNavi() }
             return
         }
-        if ((p.size >= 2 && p[0] == "Q" && p[1] == "GAS") || (p.size >= 3 && p[0] == "T" && p[1] == "Q" && p[2] == "GAS")) {
-            handler.post { appContext?.let { AlongRouteSearcher.searchGas(it) } }
+        if ((p.size >= 2 && p[0] == "Q") || (p.size >= 3 && p[0] == "T" && p[1] == "Q")) {
+            val cat = if (p[0] == "T") p[2] else p[1]
+            handler.post { appContext?.let { AlongRouteSearcher.search(it, cat) } }
             return
         }
         if ((p.size >= 2 && p[0] == "QC" && p[1] == "1") || (p.size >= 3 && p[0] == "T" && p[1] == "QC" && p[2] == "1")) {
@@ -599,7 +600,7 @@ object BleLink {
         MusicBridge.refresh(true)
         syncClock(true)
         MapFeeder.onLinkReady()            // v2.0
-        CallWatcher.syncDestinations()     // 蓝牙连接就绪时，主动向圆屏同步收藏地址 地图块和路线重发
+        CallWatcher.syncDestinations(appContext)     // 蓝牙连接就绪时，主动向圆屏同步收藏地址 地图块和路线重发
     }
 
     /** This command is never cached/replayed: a reconnect must use the current wall clock. */
@@ -641,9 +642,12 @@ object BleLink {
 
     // ================= 发送 =================
 
+    @Volatile private var destSeq = 0
+
     /** 文字消息的类型：同类型在队列里只保留最新一条 */
     private fun keyOf(msg: String): String = when {
         msg == "#GB?" -> "#GB?"
+        msg.startsWith("#DEST,") -> "DEST:" + (++destSeq)
         // v6.3 "#D角度"、v7.2 "#L毫秒" 这类没有逗号的：按前两个字符算同一类（只留最新的）
         msg.startsWith("#") -> if (msg.contains(',')) msg.substringBefore(',') else msg.take(2)
         msg == "P" -> "P"
@@ -662,7 +666,7 @@ object BleLink {
                 lastImg.clear()
                 imgQueue.clear()
             }
-            if (k != "P" && k != "#GB?") lastState[k] = msg
+            if (k != "P" && k != "#GB?" && !k.startsWith("DEST:")) lastState[k] = msg
             enqueue(k, msg.toByteArray(Charsets.UTF_8))
         }
         pump()

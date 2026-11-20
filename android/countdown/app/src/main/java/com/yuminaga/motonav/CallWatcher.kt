@@ -131,6 +131,11 @@ object CallWatcher {
                 val idx = p.getOrNull(2)?.toIntOrNull() ?: 0
                 main.post { navigateDestination(idx) }
             }
+            "RP_GO" -> {
+                val idx = p.getOrNull(2)?.toIntOrNull() ?: 0
+                main.post { ctx?.let { ScreenRoutePlanner.startSelectedRoute(it, idx) } }
+            }
+            "RP_CANCEL" -> main.post { ScreenRoutePlanner.cancel() }
             "SET_THEME" -> {
                 val t = p.getOrNull(2)?.toIntOrNull() ?: 0
                 ctx?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.putInt("map_theme", t)?.apply()
@@ -143,56 +148,32 @@ object CallWatcher {
     }
 
     fun formatNameForScreen(text: String): String {
-        val trimmed = text.trim()
-        val mapped = when (trimmed) {
-            "家", "我的家", "home", "Home", "HOME" -> "HOME"
-            "公司", "单位", "工作", "work", "Work", "WORK" -> "WORK"
-            "学校", "school", "School" -> "SCHOOL"
-            else -> null
-        }
-        if (mapped != null) return mapped
-        if (trimmed.all { it.code in 32..126 }) return trimmed.uppercase().take(28)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            try {
-                val transliterator = android.icu.text.Transliterator.getInstance("Han-Latin/Names; Upper")
-                val res = transliterator.transliterate(trimmed)
-                val clean = java.text.Normalizer.normalize(res, java.text.Normalizer.Form.NFD)
-                    .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
-                    .replace("[^A-Z0-9 -]".toRegex(), "")
-                    .trim()
-                if (clean.isNotBlank()) return clean.take(28)
-            } catch (_: Exception) {}
-        }
-        return trimmed.filter { it.code in 32..126 }.uppercase().take(28).ifBlank { trimmed.take(12) }
+        return text.trim().replace(",", " ").replace("\n", " ").take(28)
     }
 
-    fun syncDestinations() {
-        val c = ctx ?: return
+    fun syncDestinations(context: Context? = null) {
+        val c = context?.applicationContext ?: ctx ?: return
+        if (ctx == null) ctx = c
         if (!BleLink.isConnected) return
+        val isZh = java.util.Locale.getDefault().language.startsWith("zh")
+        BleLink.send(if (isZh) "#LANG,zh" else "#LANG,en")
         BleLink.send("#DEST,CLR")
         val favs = try { FavoritePlaces.load(c) } catch (_: Exception) { emptyList() }
-        for (f in favs.take(6)) {
+        for ((idx, f) in favs.take(6).withIndex()) {
             val dispName = formatNameForScreen(f.name)
             val dispAddr = formatNameForScreen(f.addr)
             BleLink.send("#DEST,ADD,0,$dispName,$dispAddr")
+            if (idx < 2) {
+                CommuteTrafficWatcher.queryCommute(c, idx, f.lat, f.lng)
+            }
         }
     }
 
     private fun navigateDestination(idx: Int) {
         val c = ctx ?: return
         val favs = try { FavoritePlaces.load(c) } catch (_: Exception) { emptyList() }
-        val target = favs.getOrNull(idx) ?: return
-        val lat = target.lat
-        val lng = target.lng
-        if (lat != 0.0 && lng != 0.0) {
-            val intent = android.content.Intent(c, NavActivity::class.java).apply {
-                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("lat", lat)
-                putExtra("lng", lng)
-                putExtra("name", target.name)
-            }
-            c.startActivity(intent)
-        }
+        val target = favs.take(6).getOrNull(idx) ?: return
+        ScreenRoutePlanner.planForScreen(c, target.name, target.addr, target.lat, target.lng)
     }
 
     private fun answer() {

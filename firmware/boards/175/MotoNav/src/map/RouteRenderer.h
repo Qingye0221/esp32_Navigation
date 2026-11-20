@@ -80,21 +80,37 @@ void routePt(float u, float &x, float &y) {
 }
 
 // 找车在路线上的位置：平时只在当前位置附近（往回 30 米、往前 300 米）找，
-// 这样掉头、绕回同一条路时不会跳到路线后面去；还没对上时才搜整条路线（最多每秒一次）
+// 这样掉头、绕回同一条路时不会跳到路线后面去；
+// 当超出小窗口时（长途高速行驶、隧道进出、偏航重新汇入），每秒进行向前恢复纠偏，防止 routeProg 永久死锁
 void updateRouteProgress(float cx, float cy) {
   if (routeN < 2) return;
-  int k0, k1;
   if (routeProg < 0) {
     if (millis() - routeSearchAt < 1000 && routeSearchAt) return;
     routeSearchAt = millis();
-    k0 = 0; k1 = routeN - 2;
-  } else {
-    int base = min((int)routeProg, routeN - 2);
-    float acc = 0;
-    k0 = base; while (k0 > 0 && acc < 30) { acc += segLen(k0 - 1); k0--; }
-    acc = 0;
-    k1 = base; while (k1 < routeN - 2 && acc < 300) { acc += segLen(k1); k1++; }
+    float best = 1e18f, bestU = -1;
+    for (int k = 0; k <= routeN - 2; k++) {
+      float ax = routeX[k], ay = routeY[k];
+      float vx = routeX[k + 1] - ax, vy = routeY[k + 1] - ay;
+      float L2 = vx * vx + vy * vy;
+      float t = L2 > 0 ? ((cx - ax) * vx + (cy - ay) * vy) / L2 : 0;
+      t = constrain(t, 0.0f, 1.0f);
+      float ex = ax + vx * t - cx, ey = ay + vy * t - cy;
+      float d2 = ex * ex + ey * ey;
+      if (d2 < best) { best = d2; bestU = k + t; }
+    }
+    if (best <= 60.0f * 60.0f) {
+      routeProg = bestU;
+    }
+    return;
   }
+
+  // 1. 优先在局部小窗口搜索（后退 30 米，前进 300 米）
+  int base = min((int)routeProg, routeN - 2);
+  float acc = 0;
+  int k0 = base; while (k0 > 0 && acc < 30) { acc += segLen(k0 - 1); k0--; }
+  acc = 0;
+  int k1 = base; while (k1 < routeN - 2 && acc < 300) { acc += segLen(k1); k1++; }
+
   float best = 1e18f, bestU = -1;
   for (int k = k0; k <= k1; k++) {
     float ax = routeX[k], ay = routeY[k];
@@ -106,8 +122,47 @@ void updateRouteProgress(float cx, float cy) {
     float d2 = ex * ex + ey * ey;
     if (d2 < best) { best = d2; bestU = k + t; }
   }
-  if (best > 50.0f * 50.0f) return;                   // 离路线超过 50 米（偏航中）：先不动
-  routeProg = bestU;
+
+  if (best <= 50.0f * 50.0f) {
+    routeProg = bestU;
+    return;
+  }
+
+  // 2. 小窗口内距离 > 50米：长途高速行驶跳出300米、进出隧道、或偏航后重新进入路线
+  // 限频 1 秒 1 次向前方路线搜索纠偏，防止 routeProg 死锁导致轨迹无法擦除或变灰
+  if (millis() - routeSearchAt >= 1000 || routeSearchAt == 0) {
+    routeSearchAt = millis();
+    float fwdBest = 1e18f, fwdBestU = -1;
+    for (int k = max(0, base - 5); k <= routeN - 2; k++) {
+      float ax = routeX[k], ay = routeY[k];
+      float vx = routeX[k + 1] - ax, vy = routeY[k + 1] - ay;
+      float L2 = vx * vx + vy * vy;
+      float t = L2 > 0 ? ((cx - ax) * vx + (cy - ay) * vy) / L2 : 0;
+      t = constrain(t, 0.0f, 1.0f);
+      float ex = ax + vx * t - cx, ey = ay + vy * t - cy;
+      float d2 = ex * ex + ey * ey;
+      if (d2 < fwdBest) { fwdBest = d2; fwdBestU = k + t; }
+    }
+    if (fwdBest <= 60.0f * 60.0f) {
+      routeProg = fwdBestU;
+      return;
+    }
+    // 前方未找到，兜底检查全线前半段
+    float allBest = 1e18f, allBestU = -1;
+    for (int k = 0; k < max(0, base - 5); k++) {
+      float ax = routeX[k], ay = routeY[k];
+      float vx = routeX[k + 1] - ax, vy = routeY[k + 1] - ay;
+      float L2 = vx * vx + vy * vy;
+      float t = L2 > 0 ? ((cx - ax) * vx + (cy - ay) * vy) / L2 : 0;
+      t = constrain(t, 0.0f, 1.0f);
+      float ex = ax + vx * t - cx, ey = ay + vy * t - cy;
+      float d2 = ex * ex + ey * ey;
+      if (d2 < allBest) { allBest = d2; allBestU = k + t; }
+    }
+    if (allBest <= 60.0f * 60.0f) {
+      routeProg = allBestU;
+    }
+  }
 }
 
 void __attribute__((optimize("O3"))) mapPolyline(const float *xs, const float *ys, int n, float w, uint16_t c, bool caps);
