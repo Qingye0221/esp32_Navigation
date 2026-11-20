@@ -75,12 +75,13 @@ inline void drawAlongPoiBanner(unsigned long t = millis()) {
       drawTranslucentCircle(CARD_X + CARD_W - 14, CARD_Y + 14, 5, 0x0000, 160);
       aaDisc(CARD_X + CARD_W - 14, CARD_Y + 14, 3.5f * remainRatio, 0xFDE0);
     } else {
-      // 未找到顺路加油站提示
+      // 未找到顺路设施提示（优先显示手机下发的精确提示文案）
       if (isChineseLang) {
-        drawTextUTF8Center(CX, CARD_Y + 32, "沿途500m内暂无加油站", C_WHITE);
+        const char *emptyMsg = alongPoi.name[0] ? alongPoi.name : "沿途暂无匹配设施";
+        drawTextUTF8Center(CX, CARD_Y + 32, emptyMsg, C_WHITE);
         drawTextUTF8Center(CX, CARD_Y + 54, "建议保持当前路线行驶", 0x8410);
       } else {
-        drawAaString(CX, CARD_Y + CARD_H / 2, "NO GAS ON ROUTE", 1.5f, 0.9f, 10.0f, C_WHITE, true);
+        drawAaString(CX, CARD_Y + CARD_H / 2, "NO POI ON ROUTE", 1.5f, 0.9f, 10.0f, C_WHITE, true);
       }
     }
   }

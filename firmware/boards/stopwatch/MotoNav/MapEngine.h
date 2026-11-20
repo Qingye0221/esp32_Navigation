@@ -1877,16 +1877,34 @@ void drawArriveBanner(uint32_t now) {
   gfx->fillCircle(CX, dotY, (LCD_WIDTH > 300 ? 5 : 4), 0x07E0);
 
   if (LCD_WIDTH > 300) {
-    drawAaString((float)CX, (float)(yTop + 38), "ARRIVED", 3.4f, 1.9f, 20.0f, C_WHITE, true);
-    drawAaString((float)CX, (float)(yTop + 70), "DESTINATION REACHED", 1.75f, 1.0f, 10.6f, 0x07E0, true);
+    drawAaString((float)CX, (float)(yTop + 34), "ARRIVED", 3.1f, 1.75f, 18.5f, C_WHITE, true);
     if (tripM >= 0) {
       char buf[48];
-      snprintf(buf, sizeof(buf), "TRIP %.1fKM %dMIN", tripM / 1000.0f, tripMin);
-      drawAaString((float)CX, (float)(yTop + 102), buf, 2.05f, 1.15f, 12.2f, 0xCE79, true);
+      snprintf(buf, sizeof(buf), "TRIP %.1fKM · %dMIN", tripM / 1000.0f, tripMin);
+      drawAaString((float)CX, (float)(yTop + 62), buf, 1.75f, 1.0f, 10.8f, 0x07E0, true);
     } else {
-      drawAaString((float)CX, (float)(yTop + 102), "CRUISING", 2.05f, 1.15f, 12.2f, 0xCE79, true);
+      drawAaString((float)CX, (float)(yTop + 62), "DESTINATION REACHED", 1.65f, 0.95f, 10.0f, 0x07E0, true);
     }
-    drawAaString((float)CX, (float)(yTop + 134), "TAP TO EXIT", 1.75f, 1.0f, 10.6f, 0x8410, true);
+
+    // 阶段二：底部「记住车位 · 寻车信标」一键按钮（y = yTop + 80 .. yTop + 124 = 378 .. 422）
+    const int bw = 224, bh = 44;
+    const int bx = CX - bw / 2;
+    const int by = yTop + 80;
+    drawTranslucentRoundRect(bx, by, bw, bh, 22, 0x0250, 235);
+    gfx->drawRoundRect(bx, by, bw, bh, 22, 0x3E7F);
+    aaDisc((float)(bx + 24), (float)(by + bh / 2), 12.0f, 0x03BF);
+    drawAaString((float)(bx + 24), (float)(by + bh / 2), "P", 1.45f, 0.9f, 9.5f, C_WHITE, true);
+    if (isChineseLang) {
+      drawTextUTF8(bx + 44, by + 29, "记住车位 · 寻车信标", C_WHITE);
+    } else {
+      drawAaString((float)(bx + 126), (float)(by + bh / 2), "SAVE SPOT & BEACON", 1.1f, 0.75f, 8.0f, C_WHITE, true);
+    }
+
+    if (isChineseLang) {
+      drawTextUTF8Center(CX, yTop + 148, "点其他区域退出", 0x8410);
+    } else {
+      drawAaString((float)CX, (float)(yTop + 146), "TAP OUTSIDE TO EXIT", 1.35f, 0.8f, 8.5f, 0x8410, true);
+    }
   } else {
     drawAaString((float)CX, (float)(yTop + 26), "ARRIVED", 2.2f, 1.25f, 13.0f, C_WHITE, true);
     drawAaString((float)CX, (float)(yTop + 50), "TAP TO EXIT", 1.4f, 0.85f, 8.5f, 0x07E0, true);

@@ -789,7 +789,7 @@ void loop() {
     noConnSince = loopNow;
   }
 
-  if (inNav && navDirty && !fxOn && !callOn && !pairOn && page == 0 && !sliding) {
+  if (inNav && navDirty && !fxOn && !callOn && !pairOn && !pkCountdownActive && page == 0 && !sliding) {
     drawNavFrame();
     navDirty = false;
   }

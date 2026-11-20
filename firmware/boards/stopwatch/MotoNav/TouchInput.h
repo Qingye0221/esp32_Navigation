@@ -326,9 +326,16 @@ void touchPoll() {
         }
         // 4. 歌词模式下或封面之外其它区域：不设 touchEat，抬手轻触触发 musicTap 切换模式，滑动允许 dragMove 拖拽换页！
       }
-      if (arrivedBannerOn && !callOn) {
-        int touchLimitY = LCD_HEIGHT - ((LCD_WIDTH > 300) ? 142 : 105);
-        if (cy0 >= touchLimitY) {
+      if (arrivedBannerOn && !callOn && !pkCountdownActive) {
+        int touchLimitY = LCD_HEIGHT - ((LCD_WIDTH > 300) ? 168 : 105);
+        if (LCD_WIDTH > 300 && cx0 >= CX - 118 && cx0 <= CX + 118 && cy0 >= 372 && cy0 <= 430) {
+          // 阶段二：点击 ARRIVED 横幅内的「记住车位 · 寻车信标」按钮 -> 通知手机记车位并进入 5 秒息屏倒计时
+          arrivedBannerOn = false;
+          resetNavState();
+          progReset();
+          pkBeaconTriggerFromArrived();
+          touchEat = true;
+        } else if (cy0 >= touchLimitY) {
           arrivedBannerOn = false;
           resetNavState();
           progReset();

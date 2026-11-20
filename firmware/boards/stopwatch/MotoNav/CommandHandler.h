@@ -136,6 +136,8 @@ void handleText(const String &m) {
   }
   if (m == "C") {
     arrivedBannerOn = false;
+    alongPoi.active = false;
+    alongSearching = false;
     if (fxOn && !fxWp) {
       // 目的地到达结算进行中：保留结算画面显示，仅重置底层导航后台数据，等待用户手动点击屏幕或按键退出！
       progReset();

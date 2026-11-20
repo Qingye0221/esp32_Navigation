@@ -540,8 +540,26 @@ class NavActivity : AppCompatActivity() {
         }
         arrivedCard.addView(TextView(this).apply { text = "已到达"; textSize = 26f; typeface = S.BOLD; setTextColor(S.PINK); gravity = Gravity.CENTER })
         arrivedCard.addView(TextView(this).apply {
-            text = destName; textSize = 15f; setTextColor(S.TEXT); gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0)
+            text = destName; textSize = 15f; setTextColor(S.TEXT); gravity = Gravity.CENTER; setPadding(0, dp(6), 0, dp(14))
         })
+        arrivedCard.addView(TextView(this).apply {
+            text = "🅿  记住当前车位（开启寻车信标）"
+            textSize = 15f; typeface = S.BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            background = S.round(this@NavActivity, Color.parseColor("#0284C7"), 14f, Color.parseColor("#38BDF8"), 1.5f)
+            setPadding(dp(18), dp(11), dp(18), dp(11))
+            setOnClickListener {
+                ParkingUiHelper.showMarkParkingDialog(this@NavActivity) {
+                    Toast.makeText(this@NavActivity, "已记住车位，稍后可在首页一键寻车", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, -2).apply { bottomMargin = dp(10) })
+        arrivedCard.addView(TextView(this).apply {
+            text = "退出导航"
+            textSize = 14f; typeface = S.MEDIUM; setTextColor(S.SUB); gravity = Gravity.CENTER
+            background = S.round(this@NavActivity, Color.parseColor("#1E293B"), 12f)
+            setPadding(dp(18), dp(9), dp(18), dp(9))
+            setOnClickListener { exitNav() }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, -2))
         root.addView(arrivedCard, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         buildSuggest()
     }
